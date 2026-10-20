@@ -1,2 +1,5 @@
 httpx>=0.28.0,<1.0
 python-dotenv>=1.0.1,<2.0
+# Gemini LLM extraction module
+pydantic>=2.7,<3.0
+google-genai>=2.31.0,<3.0

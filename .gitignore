@@ -1,3 +1,15 @@
+# Local secrets, environments, and build output
+.env
+.env.*
+!.env.example
+__pycache__/
+.venv/
+env/
+venv/
+node_modules/
+.next/
+APIx/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -14,7 +26,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -218,3 +229,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.env

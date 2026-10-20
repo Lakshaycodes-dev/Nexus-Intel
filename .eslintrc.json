@@ -1,0 +1,4 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": ["accesspilot-frontend", "APIx", "node_modules"]
+}

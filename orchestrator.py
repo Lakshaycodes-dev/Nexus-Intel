@@ -1,19 +1,22 @@
-"""Directly runnable Part 2A pipeline for TinyFish Search and Fetch."""
+"""Directly runnable pipeline for TinyFish Search, Web Agent, and Fetch."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from config import MOCK_MODE
+from services.agent_prompts import DEFAULT_OBJECTIVE
+from services.tinyfish_agent import TinyFishAgentError, WebAgentResult
+from services.tinyfish_agent import run_web_agent as extract_web_intelligence
 from services.tinyfish_fetch import TinyFishFetchError, fetch_markdown
 from services.tinyfish_search import TinyFishSearchError, search_web
 
 DUMMY_QUERY = "Stripe pricing"
-MOCK_SESSION_ID = "mock_session_9876"
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 logger = logging.getLogger(__name__)
 
@@ -23,24 +26,15 @@ def _slugify(value: str) -> str:
     return slug or "report"
 
 
-async def run_web_agent(url: str, mock: bool) -> str | None:
-    """Placeholder for Part 2B; return the browser session used for extraction."""
-    # Alternative approach: ask the TinyFish Agent to "expand every pricing toggle and
-    # accordion, then return the entire page content as clean Markdown." The Agent can
-    # interact and extract in one run, eliminating the separate Fetch call and session handoff.
-    if mock:
-        logger.info("Mock Web Agent prepared %s in session %s", url, MOCK_SESSION_ID)
-        return MOCK_SESSION_ID
+async def run_web_agent(url: str, mock: bool) -> WebAgentResult:
+    """Run the TinyFish Web Agent for one competitor URL."""
 
-    logger.warning(
-        "Web Agent is not connected yet; %s will be fetched in a fresh browser",
-        url,
-    )
-    return None
+    return await extract_web_intelligence(url, DEFAULT_OBJECTIVE, mock=mock)
 
 
 async def run_pipeline(query: str, mock: bool = MOCK_MODE) -> Path:
     """Run Search -> Web Agent -> Fetch and save the combined Markdown report."""
+
     print(f"Searching for: {query!r} (mock={mock})")
     urls = await search_web(query, mock=mock)
     print(f"Found {len(urls)} URL(s):")
@@ -50,35 +44,60 @@ async def run_pipeline(query: str, mock: bool = MOCK_MODE) -> Path:
     if not urls:
         raise RuntimeError("Search returned no URLs; nothing to fetch")
 
-    session_ids = await asyncio.gather(
+    agent_results = await asyncio.gather(
         *(run_web_agent(url, mock=mock) for url in urls)
     )
-    for url, session_id in zip(urls, session_ids):
-        print(f"  Session for {url}: {session_id or 'fresh page'}")
+    for url, agent_result in zip(urls, agent_results):
+        session = agent_result.session_id or agent_result.session_id_missing_reason
+        print(f"  Session for {url}: {session}")
+        print(
+            f"  Extraction for {url}: success={agent_result.success}, "
+            f"status={agent_result.status}, run_id={agent_result.run_id}"
+        )
 
-    results = await asyncio.gather(
+    fetch_results = await asyncio.gather(
         *(
-            fetch_markdown(url, mock=mock, session_id=session_id)
-            for url, session_id in zip(urls, session_ids)
+            fetch_markdown(url, mock=mock, session_id=agent_result.session_id)
+            for url, agent_result in zip(urls, agent_results)
         ),
         return_exceptions=True,
     )
 
     sections: list[str] = []
-    for index, (url, result) in enumerate(zip(urls, results)):
-        if isinstance(result, Exception):
-            logger.warning("Skipping %s: %s", url, result)
-            print(f"  ! Failed to fetch {url}: {result}")
+    for index, (url, fetch_result) in enumerate(zip(urls, fetch_results)):
+        agent_result = agent_results[index]
+        fetched_text: str | None = None
+        if isinstance(fetch_result, Exception):
+            logger.warning("Skipping fetch for %s: %s", url, fetch_result)
+            print(f"  ! Failed to fetch {url}: {fetch_result}")
+        else:
+            fetched_text = fetch_result
+
+        if agent_result.data is None and fetched_text is None:
             continue
-        session_id = session_ids[index] or "fresh page"
+
+        session = agent_result.session_id or "not provided by the Agent API"
+        intelligence = (
+            json.dumps(agent_result.data, indent=2, ensure_ascii=False)
+            if agent_result.data is not None
+            else "null"
+        )
+        fetch_section = fetched_text or "_Fetch did not return content for this URL._"
         sections.append(
             f"## Source: {url}\n\n"
-            f"- **Browser session:** {session_id}\n\n"
-            f"{result}"
+            f"- **Agent run:** {agent_result.run_id or 'n/a'}\n"
+            f"- **Browser session:** {session}\n"
+            f"- **Session note:** {agent_result.session_id_missing_reason or 'n/a'}\n"
+            f"- **Extraction success:** {agent_result.success}\n"
+            f"- **Extraction status:** {agent_result.status}\n\n"
+            f"### Structured intelligence\n\n"
+            f"```json\n{intelligence}\n```\n\n"
+            f"### Fetched content\n\n"
+            f"{fetch_section}"
         )
 
     if not sections:
-        raise RuntimeError("Every fetch failed; no Markdown was produced")
+        raise RuntimeError("Every extraction and fetch failed; no report was produced")
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     report = (
@@ -86,7 +105,7 @@ async def run_pipeline(query: str, mock: bool = MOCK_MODE) -> Path:
         f"- **Query:** {query}\n"
         f"- **Generated:** {generated_at}\n"
         f"- **Mock mode:** {mock}\n"
-        f"- **Sources fetched:** {len(sections)}/{len(urls)}\n\n"
+        f"- **Sources reported:** {len(sections)}/{len(urls)}\n\n"
         "---\n\n"
         + "\n\n---\n\n".join(sections)
         + "\n"
@@ -105,7 +124,7 @@ def main() -> int:
     )
     try:
         output_path = asyncio.run(run_pipeline(DUMMY_QUERY, mock=MOCK_MODE))
-    except (TinyFishSearchError, TinyFishFetchError, RuntimeError, ValueError) as exc:
+    except (TinyFishSearchError, TinyFishFetchError, TinyFishAgentError, RuntimeError, ValueError) as exc:
         logger.error("Pipeline failed: %s", exc)
         return 1
 

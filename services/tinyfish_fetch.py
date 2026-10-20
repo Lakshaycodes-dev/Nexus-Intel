@@ -12,6 +12,7 @@ from config import (
     TINYFISH_FETCH_URL,
     TINYFISH_TIMEOUT_SECONDS,
 )
+from utils.navigation_helpers import normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -110,15 +111,21 @@ async def fetch_markdown(
     mock: bool,
     session_id: str | None = None,
 ) -> str:
-    """Fetch one URL and return Markdown, optionally from an existing browser session."""
-    url = url.strip()
-    if not url.startswith(("http://", "https://")):
-        raise ValueError("url must start with http:// or https://")
+    """Fetch one URL and return Markdown.
+
+    ``session_id`` is accepted for orchestrator compatibility, but the public
+    TinyFish Fetch API is stateless and does not accept an Agent browser session.
+    """
+
+    url = normalize_url(url)
 
     if session_id is not None:
         session_id = session_id.strip()
         if not session_id:
             raise ValueError("session_id must not be blank when provided")
+        logger.warning(
+            "Ignoring session_id for Fetch; TinyFish Fetch does not accept Agent sessions"
+        )
 
     if mock:
         logger.info(
@@ -133,12 +140,10 @@ async def fetch_markdown(
 
     headers = _headers()
     payload: dict[str, Any] = {
-        "url": url,
         "urls": [url],
         "format": "markdown",
+        "purpose": "Competitor pricing, feature, product, and announcement research",
     }
-    if session_id:
-        payload["session_id"] = session_id
 
     try:
         async with httpx.AsyncClient(

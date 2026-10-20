@@ -10,6 +10,20 @@ node_modules/
 .next/
 APIx/
 
+# AccessPilot frontend kept locally, not part of Nexus-Intel
+accesspilot-frontend/
+/app/
+/components/
+/lib/
+.eslintrc.json
+next-env.d.ts
+next.config.mjs
+package-lock.json
+package.json
+postcss.config.mjs
+tailwind.config.ts
+tsconfig.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

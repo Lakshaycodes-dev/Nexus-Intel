@@ -12,7 +12,13 @@ APIx/
 
 # AccessPilot frontend kept locally, not part of Nexus-Intel
 accesspilot-frontend/
-/app/
+# Legacy rule below was '/app/' (the removed Next.js app dir). It would also
+# hide the FastAPI backend package, so it is scoped to non-Python files only:
+# app pages/components restored from the frontend stay ignored, while the
+# backend sources (app/*.py, app/routers/*.py, app/services/*.py) are tracked.
+/app/**
+!/app/**/
+!/app/**/*.py
 /components/
 /lib/
 .eslintrc.json

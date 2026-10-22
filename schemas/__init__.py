@@ -1,0 +1,43 @@
+"""Strict JSON contracts for every extraction target."""
+
+from .pydantic_schemas import (
+    TARGET_SCHEMAS,
+    AspectSentiment,
+    BillingPeriod,
+    ExtractionModel,
+    ExtractionTarget,
+    FeatureCategory,
+    FeatureComparison,
+    FeatureItem,
+    FeatureSupport,
+    FreeTier,
+    MarketNews,
+    Money,
+    NewsItem,
+    PlanTier,
+    PricingMatrix,
+    SentimentLabel,
+    SentimentScore,
+    UsageBasedRate,
+)
+
+__all__ = [
+    "TARGET_SCHEMAS",
+    "AspectSentiment",
+    "BillingPeriod",
+    "ExtractionModel",
+    "ExtractionTarget",
+    "FeatureCategory",
+    "FeatureComparison",
+    "FeatureItem",
+    "FeatureSupport",
+    "FreeTier",
+    "MarketNews",
+    "Money",
+    "NewsItem",
+    "PlanTier",
+    "PricingMatrix",
+    "SentimentLabel",
+    "SentimentScore",
+    "UsageBasedRate",
+]

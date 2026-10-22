@@ -1,166 +1,99 @@
 🚀 Nexus Intel
 Autonomous B2B Market & Competitor Intelligence Platform
 
-Built for KriticalHacks 2026 by Mutex Cartel
+Built for KriticalHacks 2026 by Team Mutex Cartel
 
-Tracking competitor pricing changes, stealth feature launches, and hidden site updates manually takes hours of tedious research. Nexus Intel is an autonomous AI intelligence platform that reduces hours of manual competitive research down to just 30 seconds (~480x faster).
+Great innovations often exist, but tracking the competition manually takes away from building them. Nexus Intel is a unified digital platform that empowers B2B SaaS founders, product managers, and venture capitalists to discover, evaluate, and track competitor pricing and feature updates through an autonomous AI-driven workflow. From navigating complex websites to synthesizing structured data, we reduce hours of manual research down to just 30 seconds.
 
-By leveraging advanced web agents and large language models, Nexus Intel autonomously navigates competitor sites, clicks through complex pricing toggles, and synthesizes the data into structured, actionable market reports.
+Problem Statement
+Businesses struggle to efficiently track competitor pricing changes, stealth feature launches, and hidden site updates manually.
 
-✨ Key Technical Features
-Autonomous DOM Navigation: Utilizes TinyFish Web Agents to interact with complex web pages (clicking "Annual Billing" toggles, expanding hidden feature accordions) prior to extraction.
+Dynamic Web Barriers: Traditional scrapers fail on interactive elements like pricing toggles, JavaScript pop-ups, and hidden accordion menus.
 
-Stateful Data Extraction: Maintains browser session state (session_id) between the Web Agent navigation and the Fetch API, ensuring we extract the modified DOM rather than a default page load.
+State Loss: Standard tools reset session states, making it impossible to capture modified web DOMs after navigating a multi-step user flow.
 
-Structured AI Synthesis: Passes raw markdown into Gemini 1.5 Flash with strict Pydantic schemas to output clean, reliable JSON data for the frontend dashboard.
+Data Overload: Raw scraped markdown or HTML is unstructured and time-consuming to parse into actionable business insights.
 
-Serverless & Scalable Architecture: Built to operate with zero idle server costs, utilizing highly efficient, asynchronous pipeline execution.
+Core Challenge: How can we create an autonomous, transparent system that moves from Search → Navigate → Extract → Synthesize → Report without human intervention?
 
+💡 Our Solution
+Nexus Intel provides an end-to-end, outcome-driven competitor intelligence workflow:
+
+Competitor Discovery → Autonomous Navigation (TinyFish) → Stateful DOM Extraction
+
+→ AI Synthesis & Structuring (Gemini 1.5) → Live Dashboard Tracking
+
+✨ Key Features
+🎯 Autonomous DOM Navigation — Interacts with complex web pages (e.g., clicking "Annual Billing", expanding accordions) without human intervention.
+
+🔄 Stateful Session Tracking — Preserves browser states (session_id) between agent actions and data fetching to ensure accurate DOM capture.
+
+🤖 Structured AI Synthesis — Passes raw markdown into Gemini 1.5 Flash with strict Pydantic schemas to output clean, reliable JSON data.
+
+👁️ Transparency & Alerts — Live Next.js dashboard for real-time tracking, historical price comparisons, and immediate feature alerts.
+
+🔐 Serverless Scalability — Built to operate with zero idle server costs, utilizing highly efficient, asynchronous pipeline execution.
+Architecture
+┌──────────────────────────────────────────────────────────┐
+│          B2B Founders · Product Managers · VCs           │
+└──────────────────────────────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────┐
+│            Next.js Frontend (Web Dashboard)              │
+└──────────────────────────┬───────────────────────────────┘
+                           │  REST APIs
+┌──────────────────────────▼───────────────────────────────┐
+│         FastAPI Backend (Asynchronous Pipeline)          │
+└───────────────┬──────────────────────────┬───────────────┘
+                │                          │
+┌───────────────▼──────────┐   ┌───────────▼───────────────┐
+│   MongoDB Database       │   │ TinyFish Web Agents &     │
+│   (State & JSON Data)    │   │ Gemini 1.5 Flash LLM      │
+└──────────────────────────┘   └───────────────────────────┘
 🛠️ Tech Stack
-Core Pipeline: Python, asynchronous execution (asyncio)
+Layer                      Technology
+Frontend               Next.js, TailwindCSS
+Backend                  Python,FastAPI
+Database                  MongoDB Atlas
+Web Agents        TinyFish API (Search, Agent Navigation, Fetch)
+AI/Synthesis           Google Gemini 1.5 Flash
+⚙️ Quick Setup
+Prerequisites
 
-Web Agent & Extraction: TinyFish API (Search, Agent Navigation, Fetch)
+Python 3.10+
 
-LLM Synthesis: Google Gemini 1.5 Flash
+Node.js (v18+)
 
-Backend Framework: FastAPI
+MongoDB Atlas Account
 
-Database: MongoDB Atlas
+Git
 
-Frontend: Next.js, TailwindCSS (Connected via REST endpoints)
-
-💻 Local Setup & Installation (For Judges & Devs)
 1. Clone the repository
-
-## FastAPI backend (`app/`)
-
-HTTP layer that lets the frontend trigger the existing orchestrator pipeline,
-persist the run in MongoDB, and retrieve results later. The pipeline itself
-(`orchestrator.py` -> `services/` -> `schemas/` -> `utils/`) is untouched; the
-backend only wraps `async run_pipeline(query, mock) -> Path`.
-
-| Module | Responsibility |
-| --- | --- |
-| `app/main.py` | App factory, CORS, lifespan (Mongo connect/close), `GET /health`, Swagger at `/docs` |
-| `app/config.py` | Env-driven settings (`os.getenv` + `python-dotenv`, same convention as `config.py`) |
-| `app/database.py` | Motor async client, index creation, `AnalysisRepository` (all persistence lives here) |
-| `app/security.py` | Domain normalisation (frontend parity) + SSRF guards (blocks localhost, private/internal IPs, internal TLDs, non-http(s) schemes, embedded credentials) |
-| `app/errors.py` | Uniform error envelope `{"error": {code, message, details}}` + exception handlers (never leaks stack traces, DSNs or keys) |
-| `app/schemas.py` | Request/response contracts, incl. the frontend's `CompetitorData` shape |
-| `app/services/orchestrator_service.py` | Calls the real `run_pipeline`, runs `GeminiService` extraction in a worker thread (`asyncio.to_thread`), maps `PricingMatrix`/`MarketNews`/`FeatureComparison` -> `CompetitorData` |
-| `app/routers/analyze.py` | `POST /api/v1/analyze`, `GET /api/v1/analyze/{analysis_id}` |
-| `app/routers/competitors.py` | `GET /api/v1/competitors/{id}` |
-| `tests/test_api.py` | 25 offline API tests (fake repository + stubbed pipeline) |
-| `scripts/smoke_test.py` | 17-check live smoke test against a running server |
-
-### Install and run
-
-```bash
-python -m venv .venv && .venv\Scripts\activate   # or activate on your platform
+git clone https://github.com/Lakshaycodes-dev/Nexus-Intel.git
+cd Nexus-Intel
+2. Install Backend Dependencies
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-# .env: copy .env.example -> .env and fill in values (never commit .env)
-uvicorn app.main:app --reload --port 8000
-```
+3. Configure Environment Variables
+Create a .env file in the root directory:
+TINYFISH_API_KEY=your_tinyfish_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+MONGODB_URI=mongodb://localhost:27017
+MOCK_MODE=true
+4. Run Locally
+# Start backend orchestrator
+python orchestrator.py
+👨‍💻 Team Mutex Cartel
+Member                              Responsibility                 
+Lakshay                   Team Lead, Pipeline Orchestration & Integration
+Riyanshu                  Core Developer (TinyFish Web Agent Navigation)
+Navya Jaiswal                            Core Developer
+Yashavi                                  Core Developer
+Jatin Sharma                             Core Developer
+🌍 Impact & Benefits
+For Startups: Faster discovery of competitor pricing shifts, reducing research time by 480x.
 
-- Swagger UI: <http://localhost:8000/docs> · ReDoc: `/redoc` · OpenAPI: `/openapi.json`
-- Run from the repository root so `app` (and the pipeline modules it imports) resolve.
+For VCs: Evidence-based market mapping and due diligence at the click of a button.
 
-### Environment variables (see `.env.example`)
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `MONGODB_URI` | `mongodb://localhost:27017` | Connection string (never logged or echoed) |
-| `MONGODB_DATABASE` / `MONGODB_COLLECTION` | `nexus_intel` / `analyses` | Where analysis records are stored |
-| `MONGODB_SERVER_SELECTION_TIMEOUT_MS` | `2000` | Startup probe timeout; app still boots if Mongo is down |
-| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Comma-separated allowed origins |
-| `CORS_ALLOW_CREDENTIALS` | `false` | Credentialled CORS (off: no auth is used) |
-| `ANALYSIS_TIMEOUT_SECONDS` | `300` | Hard timeout around one pipeline run -> 504 |
-| `MOCK_MODE` | `true` | Passed through to `run_pipeline(query, mock)` per request unless overridden |
-
-### Endpoints
-
-All errors share one envelope: `{"error": {"code": "not_found", "message": "...", "details": [...]}}`
-(codes: `validation_error` 422, `not_found` 404, `pipeline_failed` 502,
-`analysis_timeout` 504, `database_unavailable` 503, `internal_error` 500).
-
-**`POST /api/v1/analyze`** — triggers the pipeline and returns the finished result
-(the orchestrator is async, so awaiting it in-request does not block the event loop;
-`GeminiService` extraction runs via `asyncio.to_thread`).
-
-```json
-{
-  "domain": "stripe.com",
-  "parameters": {"pricing_tiers": true, "feature_accordions": true, "offsite_mentions": true},
-  "query": null,
-  "mock": null
-}
-```
-
-`domain` accepts a bare domain or a full URL (normalised like the frontend:
-`https://www.stripe.com/pricing` -> `stripe.com`). `query` and `mock` are optional
-overrides. Response 200:
-
-```json
-{
-  "analysis_id": "4a7bb1f3f45c4402a3dcda672a65cf70",
-  "status": "completed",
-  "domain": "stripe.com",
-  "query": "stripe pricing",
-  "mock": true,
-  "created_at": "2026-10-20T18:00:00Z",
-  "completed_at": "2026-10-20T18:00:02Z",
-  "execution_time_sec": 1.9,
-  "report_path": "output/stripe_pricing_market_intelligence.md",
-  "extractions": [{"target": "pricing_matrix", "provenance": null, "missing_fields": [], "warnings": [], "error": null}],
-  "data": {
-    "domain": "stripe.com",
-    "pricing": [{"tier": "Starter", "monthly": "$0", "annual": "", "features": ["1", "Basic dashboard and email support"]}],
-    "offsiteNews": [{"title": "...", "source": "TechCrunch", "url": "https://...", "sentiment": "neutral"}],
-    "capabilities": [{"name": "...", "traditionalScraper": false, "nexusIntel": true}],
-    "executionTimeSec": 1.9
-  }
-}
-```
-
-`data` matches the frontend's `CompetitorData` validator exactly
-(`domain: string`, three arrays, `executionTimeSec: number`).
-
-**`GET /api/v1/analyze/{analysis_id}`** — status/result of one run
-(`queued` -> `running` -> `completed` | `failed`, with `data`, `extractions`,
-timestamps and a client-safe `error` on failure). 404 if unknown.
-
-**`GET /api/v1/competitors/{id}`** — `{id}` is *either* a competitor domain
-(`stripe.com`, URLs are normalised) *or* a 32-char `analysis_id`; returns the
-matching record (latest analysis for that domain) with `competitor_id`, `domain`,
-`analysis_id`, `status`, `data`. 404 if nothing matches.
-
-**`GET /health`** — `{"status": "ok"|"degraded", "database": "connected"|"unavailable",
-"mock_mode": true, "version": "1.0.0", ...}`; never exposes the connection string.
-The app boots even when MongoDB is down (persistence endpoints then return 503).
-
-### Tests
-
-```bash
-python -m pytest tests/ -v          # 25 API tests + 28 pipeline tests (53 total)
-python scripts/smoke_test.py        # 17 live checks against http://127.0.0.1:8000
-```
-
-Tests are fully offline: MongoDB is replaced with an in-memory fake repository
-(dependency override) and the orchestrator service is monkeypatched.
-
-### Notes and assumptions
-
-- The pipeline is **query**-based; the frontend contract sends a **domain**. The
-  backend derives the query (`"stripe.com"` -> `"stripe pricing"`) unless an
-  explicit `query` is supplied. Documented, not invented elsewhere.
-- There is no separate competitor collection: a competitor is identified by its
-  normalised domain, and `{id}` lookup falls back from `analysis_id` to
-  "latest analysis for that domain".
-- `POST /analyze` awaits the pipeline inline because the existing frontend reads
-  the finished payload from the POST response; the persisted record keeps
-  `GET /analyze/{id}` useful for re-checks and polling.
-- The pipeline writes `output/<slug>.md` per query; concurrent runs of the
-  *same* query share that file (pre-existing orchestrator behaviour, unchanged).
-- The heuristic fallback parser can emit non-enum `billing_period` values
-  (e.g. `"$0"`); the API maps anything that is not a recognised annual period
-  to the monthly column and drops duplicate price cells from `features`.
+Economic: Sustainable SaaS model with ~88% gross margins leveraging serverless AI execution.

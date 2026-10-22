@@ -1,1 +1,1 @@
-"""TinyFish API service clients for Part 2A."""
+"""TinyFish API clients and prompt contracts for Nexus Intel."""

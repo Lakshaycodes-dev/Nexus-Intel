@@ -40,7 +40,7 @@ TINYFISH_SEARCH_URL: str = os.getenv(
 )
 TINYFISH_FETCH_URL: str = os.getenv(
     "TINYFISH_FETCH_URL",
-    "https://api.tinyfish.com/v1/fetch",
+    "https://api.fetch.tinyfish.ai",
 )
 TINYFISH_SEARCH_METHOD: str = os.getenv("TINYFISH_SEARCH_METHOD", "POST").strip().upper()
 TINYFISH_TIMEOUT_SECONDS: float = _as_float(

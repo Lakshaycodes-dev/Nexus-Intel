@@ -1,99 +1,62 @@
-🚀 Nexus Intel
-Autonomous B2B Market & Competitor Intelligence Platform
+# 🌐 Nexus Intel
+**AI-Powered B2B Market Intelligence Platform**
 
-Built for KriticalHacks 2026 by Team Mutex Cartel
+Nexus Intel is a full-stack platform designed for B2B Founders, Product Managers, and VCs to extract, synthesize, and act upon market data. Built by **Team Mutex Cartel** for KriticalHacks 2026, it utilizes a network of AI web agents to automate intelligence gathering with zero idle server costs.
 
-Great innovations often exist, but tracking the competition manually takes away from building them. Nexus Intel is a unified digital platform that empowers B2B SaaS founders, product managers, and venture capitalists to discover, evaluate, and track competitor pricing and feature updates through an autonomous AI-driven workflow. From navigating complex websites to synthesizing structured data, we reduce hours of manual research down to just 30 seconds.
+## ✨ Key Features
+* **Agentic Web Scraping:** TinyFish Web Agents autonomously navigate, search, and fetch unstructured data from the web.
+* **LLM Synthesis:** Google Gemini 1.5 Flash processes raw HTML/JSON into actionable market intelligence.
+* **Asynchronous Pipeline:** FastAPI backend ensures high-throughput, non-blocking data orchestration.
+* **Serverless Scalability:** Built for zero idle server costs with an efficient REST API architecture.
+* **Modern Dashboard:** Next.js and TailwindCSS provide a responsive, real-time web interface.
 
-Problem Statement
-Businesses struggle to efficiently track competitor pricing changes, stealth feature launches, and hidden site updates manually.
+## 🏗️ Architecture & Tech Stack
+* **Frontend:** Next.js, TailwindCSS, React
+* **Backend:** Python, FastAPI
+* **Database:** MongoDB Atlas (State & JSON Data)
+* **AI & Agents:** TinyFish Web Agents API, Google Gemini 1.5 Flash
 
-Dynamic Web Barriers: Traditional scrapers fail on interactive elements like pricing toggles, JavaScript pop-ups, and hidden accordion menus.
-
-State Loss: Standard tools reset session states, making it impossible to capture modified web DOMs after navigating a multi-step user flow.
-
-Data Overload: Raw scraped markdown or HTML is unstructured and time-consuming to parse into actionable business insights.
-
-Core Challenge: How can we create an autonomous, transparent system that moves from Search → Navigate → Extract → Synthesize → Report without human intervention?
-
-💡 Our Solution
-Nexus Intel provides an end-to-end, outcome-driven competitor intelligence workflow:
-
-Competitor Discovery → Autonomous Navigation (TinyFish) → Stateful DOM Extraction
-
-→ AI Synthesis & Structuring (Gemini 1.5) → Live Dashboard Tracking
-
-✨ Key Features
-🎯 Autonomous DOM Navigation — Interacts with complex web pages (e.g., clicking "Annual Billing", expanding accordions) without human intervention.
-
-🔄 Stateful Session Tracking — Preserves browser states (session_id) between agent actions and data fetching to ensure accurate DOM capture.
-
-🤖 Structured AI Synthesis — Passes raw markdown into Gemini 1.5 Flash with strict Pydantic schemas to output clean, reliable JSON data.
-
-👁️ Transparency & Alerts — Live Next.js dashboard for real-time tracking, historical price comparisons, and immediate feature alerts.
-
-🔐 Serverless Scalability — Built to operate with zero idle server costs, utilizing highly efficient, asynchronous pipeline execution.
-Architecture
-┌──────────────────────────────────────────────────────────┐
-│          B2B Founders · Product Managers · VCs           │
-└──────────────────────────────────────────────────────────┘
-                           │
-┌──────────────────────────▼───────────────────────────────┐
-│            Next.js Frontend (Web Dashboard)              │
-└──────────────────────────┬───────────────────────────────┘
-                           │  REST APIs
-┌──────────────────────────▼───────────────────────────────┐
-│         FastAPI Backend (Asynchronous Pipeline)          │
-└───────────────┬──────────────────────────┬───────────────┘
-                │                          │
-┌───────────────▼──────────┐   ┌───────────▼───────────────┐
-│   MongoDB Database       │   │ TinyFish Web Agents &     │
-│   (State & JSON Data)    │   │ Gemini 1.5 Flash LLM      │
-└──────────────────────────┘   └───────────────────────────┘
-🛠️ Tech Stack
-Layer                      Technology
-Frontend               Next.js, TailwindCSS
-Backend                  Python,FastAPI
-Database                  MongoDB Atlas
-Web Agents        TinyFish API (Search, Agent Navigation, Fetch)
-AI/Synthesis           Google Gemini 1.5 Flash
-⚙️ Quick Setup
-Prerequisites
-
-Python 3.10+
-
-Node.js (v18+)
-
-MongoDB Atlas Account
-
-Git
-
-1. Clone the repository
-git clone https://github.com/Lakshaycodes-dev/Nexus-Intel.git
-cd Nexus-Intel
-2. Install Backend Dependencies
+## 📂 Monorepo Structure
+This repository uses a monorepo architecture, strictly separating the Next.js client from the Python orchestrator to prevent routing conflicts.
+```text
+Nexus-Intel/
+├── client/                 # Next.js Frontend Environment
+│   ├── app/                # Web dashboard and UI routing
+│   ├── components/         # Reusable React components
+│   ├── .env.local          # Frontend secrets (git-ignored)
+│   └── package.json        
+├── app/                    # FastAPI Backend Environment
+│   ├── main.py             # Asynchronous pipeline orchestrator
+│   └── utils/              # Shared Python utilities
+├── .env                    # Backend secrets (git-ignored)
+├── requirements.txt        
+└── README.md
+Environment Variables
+1. Backend (/.env)
+GEMINI_API_KEY=your_google_gemini_key
+TINYFISH_API_KEY=your_tinyfish_key
+MONGODB_URI=your_mongodb_connection_string
+2. Frontend (/client/.env.local)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+🚀 Quick Setup
+1. Backend Installation (FastAPI)
+Open a terminal in the root directory:
+# Create and activate virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-3. Configure Environment Variables
-Create a .env file in the root directory:
-TINYFISH_API_KEY=your_tinyfish_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-MONGODB_URI=mongodb://localhost:27017
-MOCK_MODE=true
-4. Run Locally
-# Start backend orchestrator
-python orchestrator.py
-👨‍💻 Team Mutex Cartel
-Member                              Responsibility                 
-Lakshay                   Team Lead, Pipeline Orchestration & Integration
-Riyanshu                  Core Developer (TinyFish Web Agent Navigation)
-Navya Jaiswal                            Core Developer
-Yashavi                                  Core Developer
-Jatin Sharma                             Core Developer
-🌍 Impact & Benefits
-For Startups: Faster discovery of competitor pricing shifts, reducing research time by 480x.
 
-For VCs: Evidence-based market mapping and due diligence at the click of a button.
+# Start the asynchronous pipeline
+uvicorn app.main:app --reload
+2. Frontend Installation (Next.js)
+Open a second terminal and navigate to the isolated frontend folder:
+cd client
 
-Economic: Sustainable SaaS model with ~88% gross margins leveraging serverless AI execution.
+# Install dependencies
+npm install
+
+# Start the web dashboard
+npm run dev
+The frontend will be available at http://localhost:3000 and the backend API at http://localhost:8000.

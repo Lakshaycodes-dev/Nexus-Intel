@@ -12,6 +12,7 @@ import {
   Loader2,
   MousePointerClick,
   Radar,
+  RotateCcw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -20,6 +21,13 @@ import type { ExecutionStep, ScopeKey, TerminalLine } from "@/lib/types";
 import { scanScopeLabels } from "@/lib/scopes";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import {
+  analyzeCompetitor,
+  ApiError,
+  scopesToParameters,
+  type AnalyzeResponse,
+} from "@/lib/api";
+import { rememberAnalysis } from "@/lib/recent";
 
 interface LiveExecutionModalProps {
   open: boolean;
@@ -96,8 +104,12 @@ function ScanPanel({
   scopes,
 }: Omit<LiveExecutionModalProps, "open">) {
   const [elapsed, setElapsed] = useState(0);
+  const [result, setResult] = useState<AnalyzeResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const terminalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const scopeKey = scopes.join("-");
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -110,7 +122,7 @@ function ScanPanel({
     }, 80);
 
     return () => window.clearInterval(interval);
-  }, []);
+  }, [attempt]);
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -129,9 +141,69 @@ function ScanPanel({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    // Delay slightly so React StrictMode's mount/unmount probe does not fire
+    // two real pipeline runs in development.
+    const timer = window.setTimeout(() => {
+      analyzeCompetitor(
+        { domain: target, parameters: scopesToParameters(scopes) },
+        controller.signal,
+      )
+        .then((response) => {
+          if (!active) return;
+          setResult(response);
+          rememberAnalysis({
+            analysis_id: response.analysis_id,
+            domain: response.domain,
+            created_at: response.created_at,
+          });
+        })
+        .catch((cause: unknown) => {
+          if (!active || controller.signal.aborted) return;
+          setError(
+            cause instanceof ApiError
+              ? cause.message
+              : "The scan failed unexpectedly. Please retry.",
+          );
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, target, scopeKey]);
+
+  const dynamicLines = useMemo<TerminalLine[]>(() => {
+    if (!result) return [];
+    const data = result.data;
+    return [
+      {
+        at: TOTAL_DURATION,
+        time: `+${result.execution_time_sec.toFixed(1)}s`,
+        level: "success",
+        message: `analysis ${result.analysis_id} persisted · ${data.pricing.length} pricing tiers`,
+      },
+      {
+        at: TOTAL_DURATION,
+        time: `+${result.execution_time_sec.toFixed(1)}s`,
+        level: "info",
+        message: `${data.offsiteNews.length} off-site mentions · ${data.capabilities.length} capabilities mapped`,
+      },
+    ];
+  }, [result]);
+
   const visibleLines = useMemo(
-    () => TERMINAL_LINES.filter((line) => line.at <= elapsed),
-    [elapsed],
+    () => [
+      ...TERMINAL_LINES.filter((line) => line.at <= elapsed),
+      ...dynamicLines,
+    ],
+    [elapsed, dynamicLines],
   );
 
   useEffect(() => {
@@ -140,14 +212,20 @@ function ScanPanel({
     }
   }, [visibleLines.length]);
 
-  const progress = Math.min(100, Math.round((elapsed / TOTAL_DURATION) * 100));
-  const complete = elapsed >= TOTAL_DURATION;
+  const complete = result !== null;
+  const progress = complete
+    ? 100
+    : Math.min(92, Math.round((elapsed / TOTAL_DURATION) * 92));
   const activeIndex = complete
     ? STEPS.length
     : STEPS.findIndex((step) => elapsed >= step.startAt && elapsed < step.endAt);
 
   function stateFor(index: number): StepState {
-    if (complete || elapsed >= STEPS[index].endAt) return "complete";
+    if (complete) return "complete";
+    if (error) return index === STEPS.length - 1 ? "active" : "pending";
+    if (elapsed >= STEPS[index].endAt) {
+      return index === STEPS.length - 1 ? "active" : "complete";
+    }
     if (index === activeIndex) return "active";
     return "pending";
   }
@@ -160,235 +238,292 @@ function ScanPanel({
       transition={{ duration: 0.2 }}
       className="fixed inset-0 z-[80]"
     >
-          <motion.button
-            type="button"
-            aria-label="Close live scan panel"
-            className="absolute inset-0 h-full w-full cursor-default bg-slate-950/30 backdrop-blur-[3px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            tabIndex={-1}
-          />
-          <motion.aside
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="live-scan-title"
-            className="absolute right-0 top-0 flex h-full w-full max-w-[600px] flex-col border-l border-slate-200 bg-[#FBFCFE] shadow-2xl"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 30, stiffness: 300 }}
-          >
-            <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-5 pb-5 pt-5 sm:px-7">
-              <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-indigo-100/60 blur-3xl" />
-              <div className="relative flex items-start justify-between gap-4">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "flex h-6 items-center gap-1.5 rounded-full border px-2 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                        complete
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-indigo-100 bg-indigo-50 text-indigo-700",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "h-1.5 w-1.5 rounded-full",
-                          complete ? "bg-emerald-500" : "animate-pulse-soft bg-indigo-500",
-                        )}
-                      />
-                      {complete ? "Scan complete" : "Live extraction"}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      {complete ? "8.2s elapsed" : `${progress}%`}
-                    </span>
-                  </div>
-                  <h2
-                    id="live-scan-title"
-                    className="text-xl font-semibold tracking-tight text-ink"
-                  >
-                    {complete ? "Your market moved. We caught it." : "Reading the market in real time."}
-                  </h2>
-                  <div className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
-                    <Globe2 className="h-3.5 w-3.5 text-slate-400" />
-                    <span className="font-mono text-[12px] text-slate-700">{target}</span>
-                    <span className="text-slate-300">/</span>
-                    <span className="text-[12px]">
-                      {scopes.map((scope) => scanScopeLabels[scope]).join(" · ")}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  ref={closeRef}
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Close panel"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      <motion.button
+        type="button"
+        aria-label="Close live scan panel"
+        className="absolute inset-0 h-full w-full cursor-default bg-slate-950/30 backdrop-blur-[3px]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        tabIndex={-1}
+      />
+      <motion.aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="live-scan-title"
+        className="absolute right-0 top-0 flex h-full w-full max-w-[600px] flex-col border-l border-slate-200 bg-[#FBFCFE] shadow-2xl"
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+      >
+        <div className="relative overflow-hidden border-b border-slate-200/80 bg-white px-5 pb-5 pt-5 sm:px-7">
+          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-indigo-100/60 blur-3xl" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex h-6 items-center gap-1.5 rounded-full border px-2 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                    complete
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : error
+                        ? "border-rose-200 bg-rose-50 text-rose-700"
+                        : "border-indigo-100 bg-indigo-50 text-indigo-700",
+                  )}
                 >
-                  <X className="h-4 w-4" />
-                </button>
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      complete
+                        ? "bg-emerald-500"
+                        : error
+                          ? "bg-rose-500"
+                          : "animate-pulse-soft bg-indigo-500",
+                    )}
+                  />
+                  {complete ? "Scan complete" : error ? "Scan failed" : "Live extraction"}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {complete
+                    ? `${result.execution_time_sec.toFixed(1)}s elapsed`
+                    : error
+                      ? "stopped"
+                      : `${progress}%`}
+                </span>
               </div>
-
-              <div className="relative mt-5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400"
-                  style={{ width: `${progress}%` }}
-                />
+              <h2
+                id="live-scan-title"
+                className="text-xl font-semibold tracking-tight text-ink"
+              >
+                {complete
+                  ? "Your market moved. We caught it."
+                  : error
+                    ? "The market scan hit a snag."
+                    : "Reading the market in real time."}
+              </h2>
+              <div className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
+                <Globe2 className="h-3.5 w-3.5 text-slate-400" />
+                <span className="font-mono text-[12px] text-slate-700">{target}</span>
+                <span className="text-slate-300">/</span>
+                <span className="text-[12px]">
+                  {scopes.map((scope) => scanScopeLabels[scope]).join(" · ")}
+                </span>
               </div>
             </div>
+            <button
+              ref={closeRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Close panel"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
-              <div className="mb-5 flex items-center justify-between">
-                <p className="eyebrow">Execution path</p>
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                  {complete ? "4 / 4 complete" : `${Math.min(activeIndex + 1, 4)} / 4 in progress`}
-                </p>
-              </div>
+          <div className="relative mt-5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <motion.div
+              className={cn(
+                "h-full rounded-full",
+                error
+                  ? "bg-gradient-to-r from-rose-500 to-orange-400"
+                  : "bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400",
+              )}
+              style={{ width: `${error ? 100 : progress}%` }}
+            />
+          </div>
+        </div>
 
-              <div className="space-y-1">
-                {STEPS.map((step, index) => {
-                  const state = stateFor(index);
-                  const Icon = STEP_ICONS[index];
-                  return (
-                    <div key={step.id} className="relative flex gap-3.5 pb-5 last:pb-0">
-                      {index < STEPS.length - 1 ? (
-                        <div className="absolute left-[17px] top-8 h-[calc(100%-30px)] w-px bg-slate-200">
-                          <div
-                            className={cn(
-                              "w-px bg-indigo-400 transition-all duration-500",
-                              state === "complete" ? "h-full" : "h-0",
-                            )}
-                          />
-                        </div>
-                      ) : null}
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+          <div className="mb-5 flex items-center justify-between">
+            <p className="eyebrow">Execution path</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-slate-400">
+              {complete
+                ? "4 / 4 complete"
+                : `${Math.min(Math.max(activeIndex + 1, 1), 4)} / 4 in progress`}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            {STEPS.map((step, index) => {
+              const state = stateFor(index);
+              const Icon = STEP_ICONS[index];
+              return (
+                <div key={step.id} className="relative flex gap-3.5 pb-5 last:pb-0">
+                  {index < STEPS.length - 1 ? (
+                    <div className="absolute left-[17px] top-8 h-[calc(100%-30px)] w-px bg-slate-200">
                       <div
                         className={cn(
-                          "relative z-10 mt-0.5 flex h-[35px] w-[35px] shrink-0 items-center justify-center rounded-xl border transition-colors duration-300",
-                          state === "complete" &&
-                            "border-emerald-200 bg-emerald-50 text-emerald-600",
-                          state === "active" &&
-                            "border-indigo-200 bg-indigo-50 text-indigo-600 shadow-[0_0_0_4px_rgba(99,102,241,0.06)]",
-                          state === "pending" &&
-                            "border-slate-200 bg-white text-slate-400",
+                          "w-px bg-indigo-400 transition-all duration-500",
+                          state === "complete" ? "h-full" : "h-0",
+                        )}
+                      />
+                    </div>
+                  ) : null}
+                  <div
+                    className={cn(
+                      "relative z-10 mt-0.5 flex h-[35px] w-[35px] shrink-0 items-center justify-center rounded-xl border transition-colors duration-300",
+                      state === "complete" &&
+                        "border-emerald-200 bg-emerald-50 text-emerald-600",
+                      state === "active" &&
+                        "border-indigo-200 bg-indigo-50 text-indigo-600 shadow-[0_0_0_4px_rgba(99,102,241,0.06)]",
+                      state === "pending" &&
+                        "border-slate-200 bg-white text-slate-400",
+                    )}
+                  >
+                    {state === "complete" ? (
+                      <Check className="h-4 w-4" strokeWidth={2.5} />
+                    ) : state === "active" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Icon className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p
+                        className={cn(
+                          "text-[13px] font-medium",
+                          state === "pending" ? "text-slate-400" : "text-slate-900",
                         )}
                       >
-                        {state === "complete" ? (
-                          <Check className="h-4 w-4" strokeWidth={2.5} />
-                        ) : state === "active" ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Icon className="h-4 w-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 pt-0.5">
-                        <div className="flex items-center justify-between gap-3">
-                          <p
-                            className={cn(
-                              "text-[13px] font-medium",
-                              state === "pending" ? "text-slate-400" : "text-slate-900",
-                            )}
-                          >
-                            {step.title}
-                          </p>
-                          <span className="font-mono text-[10px] text-slate-400">
-                            {state === "complete"
-                              ? "done"
-                              : state === "active"
-                                ? "running"
-                                : `${((step.endAt - step.startAt) / 1000).toFixed(1)}s`}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500">
-                          {step.description}
-                        </p>
-                      </div>
+                        {step.title}
+                      </p>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        {state === "complete"
+                          ? "done"
+                          : state === "active"
+                            ? "running"
+                            : `${((step.endAt - step.startAt) / 1000).toFixed(1)}s`}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 overflow-hidden rounded-xl border border-slate-800 bg-[#0B1120] shadow-inner">
-                <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-rose-400/80" />
-                    <span className="h-2 w-2 rounded-full bg-amber-400/80" />
-                    <span className="h-2 w-2 rounded-full bg-emerald-400/80" />
-                    <span className="ml-2 font-mono text-[10px] tracking-wide text-slate-500">
-                      nexus://scan-live
-                    </span>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-slate-500">
+                      {step.description}
+                    </p>
                   </div>
-                  <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">
-                    <Circle className="h-1.5 w-1.5 fill-emerald-400 text-emerald-400" />
-                    streaming
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-xl border border-slate-800 bg-[#0B1120] shadow-inner">
+            <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-rose-400/80" />
+                <span className="h-2 w-2 rounded-full bg-amber-400/80" />
+                <span className="h-2 w-2 rounded-full bg-emerald-400/80" />
+                <span className="ml-2 font-mono text-[10px] tracking-wide text-slate-500">
+                  nexus://scan-live
+                </span>
+              </div>
+              <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                <Circle className="h-1.5 w-1.5 fill-emerald-400 text-emerald-400" />
+                {complete ? "complete" : error ? "halted" : "streaming"}
+              </span>
+            </div>
+            <div
+              ref={terminalRef}
+              className="h-[188px] overflow-y-auto px-4 py-3 font-mono text-[11px] leading-[1.75]"
+            >
+              {visibleLines.map((line) => (
+                <div key={`${line.at}-${line.message}`} className="flex gap-2.5">
+                  <span className="shrink-0 text-slate-600">{line.time}</span>
+                  <span
+                    className={cn(
+                      line.level === "success" && "text-emerald-300",
+                      line.level === "info" && "text-cyan-200/90",
+                      line.level === "muted" && "text-slate-400",
+                    )}
+                  >
+                    {line.message}
                   </span>
                 </div>
-                <div
-                  ref={terminalRef}
-                  className="h-[188px] overflow-y-auto px-4 py-3 font-mono text-[11px] leading-[1.75]"
-                >
-                  {visibleLines.map((line) => (
-                    <div key={`${line.at}-${line.message}`} className="flex gap-2.5">
-                      <span className="shrink-0 text-slate-600">{line.time}</span>
-                      <span
-                        className={cn(
-                          line.level === "success" && "text-emerald-300",
-                          line.level === "info" && "text-cyan-200/90",
-                          line.level === "muted" && "text-slate-400",
-                        )}
-                      >
-                        {line.message}
-                      </span>
-                    </div>
-                  ))}
-                  {!complete ? (
-                    <div className="flex gap-2.5">
-                      <span className="shrink-0 text-slate-600">···</span>
-                      <span className="inline-flex items-center gap-1 text-slate-300">
-                        processing
-                        <span className="inline-block h-3 w-1.5 animate-blink bg-slate-500" />
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="mt-1 flex gap-2.5">
-                      <span className="shrink-0 text-slate-600">$</span>
-                      <span className="text-slate-300">
-                        brief ready
-                        <span className="ml-1 inline-block h-3 w-1.5 animate-blink bg-slate-500" />
-                      </span>
-                    </div>
-                  )}
+              ))}
+              {error ? (
+                <div className="mt-1 flex gap-2.5">
+                  <span className="shrink-0 text-rose-400">!</span>
+                  <span className="text-rose-300">scan halted · {error}</span>
                 </div>
-              </div>
+              ) : !complete ? (
+                <div className="flex gap-2.5">
+                  <span className="shrink-0 text-slate-600">···</span>
+                  <span className="inline-flex items-center gap-1 text-slate-300">
+                    processing
+                    <span className="inline-block h-3 w-1.5 animate-blink bg-slate-500" />
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-1 flex gap-2.5">
+                  <span className="shrink-0 text-slate-600">$</span>
+                  <span className="text-slate-300">
+                    brief ready
+                    <span className="ml-1 inline-block h-3 w-1.5 animate-blink bg-slate-500" />
+                  </span>
+                </div>
+              )}
             </div>
+          </div>
+        </div>
 
-            <div className="border-t border-slate-200/80 bg-white px-5 py-4 sm:px-7">
-              <div className="flex items-center justify-between gap-3">
-                <p className="hidden text-[11px] text-slate-400 sm:block">
-                  Workspace scan · encrypted at rest
-                </p>
-                {complete ? (
-                  <Link
-                    href="/dashboard/competitors/trackline"
-                    onClick={onClose}
-                    className={cn(buttonVariants({ size: "md" }), "ml-auto")}
-                  >
-                    Open intelligence brief
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className={buttonVariants({ variant: "secondary", size: "md" })}
-                  >
-                    Run in background
-                  </button>
-                )}
+        <div className="border-t border-slate-200/80 bg-white px-5 py-4 sm:px-7">
+          <div className="flex items-center justify-between gap-3">
+            {error ? (
+              <p role="alert" className="text-[10px] leading-relaxed text-rose-600">
+                {error}
+              </p>
+            ) : (
+              <p className="hidden text-[11px] text-slate-400 sm:block">
+                {complete
+                  ? "Result persisted to MongoDB · GET /api/v1/analyze/{id}"
+                  : "Workspace scan · encrypted at rest"}
+              </p>
+            )}
+            {complete ? (
+              <Link
+                href={`/dashboard/competitors/${encodeURIComponent(result.domain)}`}
+                onClick={onClose}
+                className={cn(buttonVariants({ size: "md" }), "ml-auto")}
+              >
+                Open intelligence brief
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            ) : error ? (
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setElapsed(0);
+                    setResult(null);
+                    setError(null);
+                    setAttempt((value) => value + 1);
+                  }}
+                  className={buttonVariants({ size: "md" })}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry scan
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className={buttonVariants({ variant: "secondary", size: "md" })}
+                >
+                  Close
+                </button>
               </div>
-            </div>
-          </motion.aside>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                className={buttonVariants({ variant: "secondary", size: "md" })}
+              >
+                Run in background
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.aside>
     </motion.div>
   );
 }

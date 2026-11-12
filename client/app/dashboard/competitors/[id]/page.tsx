@@ -19,7 +19,9 @@ import {
   Tag,
   Users,
 } from "lucide-react";
-import { competitors, getCompetitor } from "@/lib/data";
+import { findCompetitor } from "@/lib/data";
+import { getCompetitor as fetchCompetitor } from "@/lib/api";
+import { competitorFromResponse } from "@/lib/adapters";
 import { cn, formatCurrency } from "@/lib/utils";
 import { CompetitorHeader } from "@/components/dashboard/competitor-header";
 import { PricingMatrix } from "@/components/dashboard/pricing-matrix";
@@ -31,18 +33,19 @@ interface CompetitorPageProps {
   params: Promise<{ id: string }>;
 }
 
-export function generateStaticParams() {
-  return competitors.map((competitor) => ({ id: competitor.id }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
 }: CompetitorPageProps): Promise<Metadata> {
   const { id } = await params;
-  const competitor = getCompetitor(id);
+  const competitor = findCompetitor(id);
 
   if (!competitor) {
-    return { title: "Competitor not found" };
+    return {
+      title: `${id} — Intelligence Brief`,
+      description: `Live competitor intelligence for ${id}.`,
+    };
   }
 
   return {
@@ -53,7 +56,15 @@ export async function generateMetadata({
 
 export default async function CompetitorPage({ params }: CompetitorPageProps) {
   const { id } = await params;
-  const competitor = getCompetitor(id);
+  let competitor = findCompetitor(id);
+
+  try {
+    const response = await fetchCompetitor(competitor?.domain ?? id);
+    competitor = competitorFromResponse(response, competitor) ?? competitor;
+  } catch {
+    // The backend may be offline or have no stored run yet: fall back to the
+    // cached watchlist fixture so the dashboard stays usable.
+  }
 
   if (!competitor) {
     notFound();

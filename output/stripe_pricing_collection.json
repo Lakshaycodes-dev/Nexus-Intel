@@ -1,0 +1,818 @@
+{
+  "report_path": "D:\\nexuxintel\\Nexus-Intel\\output\\stripe_pricing_market_intelligence.md",
+  "source_urls": [
+    "https://stripe.com/pricing",
+    "https://stripe.com/features",
+    "https://stripe.com/changelog",
+    "https://stripe.com/about"
+  ],
+  "pages": [
+    {
+      "url": "https://stripe.com/pricing",
+      "categories": [
+        "pricing"
+      ],
+      "classification": {
+        "primary": "pricing",
+        "categories": [
+          "pricing"
+        ],
+        "confidence": 1.0,
+        "signals": [
+          "url:pricing",
+          "title:Pricing",
+          "heading:Pricing",
+          "text:/yr",
+          "text:billed annually",
+          "text:free trial"
+        ]
+      },
+      "pricing": {
+        "target": "pricing_matrix",
+        "vendor": "stripe.com",
+        "source_url": "https://stripe.com/pricing",
+        "currency": "USD",
+        "plans": [
+          {
+            "name": "Starter",
+            "price": 0.0,
+            "price_display": "$0/mo",
+            "currency": "USD",
+            "billing_period": "monthly",
+            "seats": 1,
+            "included_features": [
+              "Basic dashboard and email support"
+            ],
+            "notes": null,
+            "evidence": [
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Starter | $0/mo | 1 | Basic dashboard and email support",
+                "method": "table",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              },
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Starter $0/mo",
+                "method": "text",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              }
+            ]
+          },
+          {
+            "name": "Growth",
+            "price": 49.0,
+            "price_display": "$49/mo",
+            "currency": "USD",
+            "billing_period": "monthly",
+            "seats": 10,
+            "included_features": [
+              "Advanced analytics and priority support"
+            ],
+            "notes": null,
+            "evidence": [
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Growth | $49/mo | 10 | Advanced analytics and priority support",
+                "method": "table",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              },
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Growth $49/mo",
+                "method": "text",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              }
+            ]
+          },
+          {
+            "name": "Scale",
+            "price": 199.0,
+            "price_display": "$199/mo",
+            "currency": "USD",
+            "billing_period": "monthly",
+            "seats": 50,
+            "included_features": [
+              "SSO, audit logs, and dedicated support"
+            ],
+            "notes": null,
+            "evidence": [
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Scale | $199/mo | 50 | SSO, audit logs, and dedicated support",
+                "method": "table",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              },
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Scale $199/mo",
+                "method": "text",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              }
+            ]
+          },
+          {
+            "name": "Starter",
+            "price": 0.0,
+            "price_display": "$0/yr",
+            "currency": "USD",
+            "billing_period": "yearly",
+            "seats": 1,
+            "included_features": [
+              "Basic dashboard and email support"
+            ],
+            "notes": null,
+            "evidence": [
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Starter | $0/yr | 1 | Basic dashboard and email support",
+                "method": "table",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              },
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Starter $0/yr",
+                "method": "text",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              }
+            ]
+          },
+          {
+            "name": "Growth",
+            "price": 468.0,
+            "price_display": "$468/yr",
+            "currency": "USD",
+            "billing_period": "yearly",
+            "seats": 10,
+            "included_features": [
+              "Advanced analytics and priority support"
+            ],
+            "notes": null,
+            "evidence": [
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Growth | $468/yr | 10 | Advanced analytics and priority support",
+                "method": "table",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              },
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Growth $468/yr",
+                "method": "text",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              }
+            ]
+          },
+          {
+            "name": "Scale",
+            "price": 1908.0,
+            "price_display": "$1,908/yr",
+            "currency": "USD",
+            "billing_period": "yearly",
+            "seats": 50,
+            "included_features": [
+              "SSO, audit logs, and dedicated support"
+            ],
+            "notes": null,
+            "evidence": [
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Scale | $1,908/yr | 50 | SSO, audit logs, and dedicated support",
+                "method": "table",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              },
+              {
+                "source_url": "https://stripe.com/pricing",
+                "snippet": "Scale $1,908/yr",
+                "method": "text",
+                "retrieved_at": "2026-11-12T11:45:10Z"
+              }
+            ]
+          }
+        ],
+        "usage_based_rates": [],
+        "free_tier": {
+          "available": true,
+          "description": "All plans include a 14-day free trial. Enterprise: contact sales for a custom quote.",
+          "limits": []
+        },
+        "enterprise_note": "All plans include a 14-day free trial. Enterprise: contact sales for a custom quote.",
+        "missing_fields": [
+          "usage_based_rates"
+        ],
+        "warnings": [],
+        "source_snapshots": [
+          {
+            "url": "https://stripe.com/pricing",
+            "billing_state": "monthly"
+          },
+          {
+            "url": "https://stripe.com/pricing",
+            "billing_state": "annual"
+          }
+        ]
+      },
+      "features": {
+        "target": "feature_comparison",
+        "subject": "stripe.com",
+        "source_url": "https://stripe.com/pricing",
+        "categories": [],
+        "missing_fields": [
+          "categories"
+        ],
+        "warnings": [
+          "no deterministic feature rows detected"
+        ]
+      },
+      "news": {},
+      "generic": {
+        "title": "Stripe Pricing",
+        "source_url": "https://stripe.com/pricing",
+        "summary": "Choose the plan that fits your team. Prices are billed monthly.\n\nStarter $0/mo\nBasic dashboard and email support\n\nGrowth $49/mo\nAdvanced analytics and priority support",
+        "headings": [
+          "Pricing",
+          "Plans",
+          "Compare plans"
+        ],
+        "product_details": [
+          {
+            "name": "Stripe Pricing",
+            "detail": "Choose the plan that fits your team. Prices are billed monthly.\n\nStarter $0/mo\nBasic dashboard and email support\n\nGrowth $49/mo\nAdvanced analytics and priority support",
+            "source_url": "https://stripe.com/pricing"
+          }
+        ],
+        "classification": {
+          "primary": "pricing",
+          "categories": [
+            "pricing"
+          ],
+          "confidence": 1.0,
+          "signals": [
+            "url:pricing",
+            "title:Pricing",
+            "heading:Pricing",
+            "text:/yr",
+            "text:billed annually",
+            "text:free trial"
+          ]
+        },
+        "text_length": 665
+      },
+      "snapshots": [
+        {
+          "url": "https://stripe.com/pricing",
+          "final_url": "https://stripe.com/pricing",
+          "title": "Stripe Pricing",
+          "meta_description": "Plans and pricing for Stripe.",
+          "headings": [
+            "Pricing",
+            "Plans",
+            "Compare plans"
+          ],
+          "text": "# Stripe Pricing\n\nChoose the plan that fits your team. Prices are billed monthly.\n\nStarter $0/mo\nBasic dashboard and email support\n\nGrowth $49/mo\nAdvanced analytics and priority support\n\nScale $199/mo\nSSO, audit logs, and dedicated support\n\nAll plans include a 14-day free trial. Enterprise: contact sales for a custom quote.\n",
+          "html_length": 0,
+          "links": [
+            "https://stripe.com/features",
+            "https://stripe.com/changelog",
+            "https://stripe.com/about"
+          ],
+          "tables": [
+            {
+              "headers": [
+                "Plan",
+                "Monthly price",
+                "Seats",
+                "Features"
+              ],
+              "rows": [
+                [
+                  "Starter",
+                  "$0/mo",
+                  "1",
+                  "Basic dashboard and email support"
+                ],
+                [
+                  "Growth",
+                  "$49/mo",
+                  "10",
+                  "Advanced analytics and priority support"
+                ],
+                [
+                  "Scale",
+                  "$199/mo",
+                  "50",
+                  "SSO, audit logs, and dedicated support"
+                ]
+              ]
+            }
+          ],
+          "lists": [],
+          "billing_state": "monthly",
+          "interactions": [],
+          "status": "success",
+          "error": null,
+          "retrieval_method": "playwright",
+          "retrieved_at": "2026-11-12T11:45:10Z"
+        },
+        {
+          "url": "https://stripe.com/pricing",
+          "final_url": "https://stripe.com/pricing",
+          "title": "Stripe Pricing",
+          "meta_description": "Plans and pricing for Stripe.",
+          "headings": [
+            "Pricing",
+            "Plans",
+            "Compare plans"
+          ],
+          "text": "# Stripe Pricing\n\nChoose the plan that fits your team. Prices are billed annually.\n\nStarter $0/yr\nBasic dashboard and email support\n\nGrowth $468/yr\nAdvanced analytics and priority support\n\nScale $1,908/yr\nSSO, audit logs, and dedicated support\n\nAll annual plans include a 14-day free trial. Enterprise: contact sales for a custom quote.\n",
+          "html_length": 0,
+          "links": [
+            "https://stripe.com/features",
+            "https://stripe.com/changelog",
+            "https://stripe.com/about"
+          ],
+          "tables": [
+            {
+              "headers": [
+                "Plan",
+                "Annual price",
+                "Seats",
+                "Features"
+              ],
+              "rows": [
+                [
+                  "Starter",
+                  "$0/yr",
+                  "1",
+                  "Basic dashboard and email support"
+                ],
+                [
+                  "Growth",
+                  "$468/yr",
+                  "10",
+                  "Advanced analytics and priority support"
+                ],
+                [
+                  "Scale",
+                  "$1,908/yr",
+                  "50",
+                  "SSO, audit logs, and dedicated support"
+                ]
+              ]
+            }
+          ],
+          "lists": [],
+          "billing_state": "annual",
+          "interactions": [],
+          "status": "success",
+          "error": null,
+          "retrieval_method": "playwright",
+          "retrieved_at": "2026-11-12T11:45:10Z"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "url": "https://stripe.com/features",
+      "categories": [
+        "features",
+        "product"
+      ],
+      "classification": {
+        "primary": "features",
+        "categories": [
+          "features",
+          "product"
+        ],
+        "confidence": 1.0,
+        "signals": [
+          "url:features",
+          "title:Features",
+          "heading:Features",
+          "text:Features"
+        ]
+      },
+      "pricing": {},
+      "features": {
+        "target": "feature_comparison",
+        "subject": "stripe.com",
+        "source_url": "https://stripe.com/features",
+        "categories": [
+          {
+            "name": "Analytics",
+            "features": [
+              {
+                "name": "Real-time dashboards",
+                "category": "Analytics",
+                "description": "",
+                "support": "unknown",
+                "plans": [],
+                "value": null,
+                "evidence": [
+                  {
+                    "source_url": "https://stripe.com/features",
+                    "snippet": "Real-time dashboards",
+                    "method": "list",
+                    "retrieved_at": "2026-11-12T11:45:10Z"
+                  }
+                ]
+              },
+              {
+                "name": "Competitor tracking",
+                "category": "Analytics",
+                "description": "",
+                "support": "unknown",
+                "plans": [],
+                "value": null,
+                "evidence": [
+                  {
+                    "source_url": "https://stripe.com/features",
+                    "snippet": "Competitor tracking",
+                    "method": "list",
+                    "retrieved_at": "2026-11-12T11:45:10Z"
+                  }
+                ]
+              },
+              {
+                "name": "Custom alerts",
+                "category": "Analytics",
+                "description": "",
+                "support": "unknown",
+                "plans": [],
+                "value": null,
+                "evidence": [
+                  {
+                    "source_url": "https://stripe.com/features",
+                    "snippet": "Custom alerts",
+                    "method": "list",
+                    "retrieved_at": "2026-11-12T11:45:10Z"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Security",
+            "features": [
+              {
+                "name": "Single sign-on (SSO)",
+                "category": "Security",
+                "description": "",
+                "support": "unknown",
+                "plans": [],
+                "value": null,
+                "evidence": [
+                  {
+                    "source_url": "https://stripe.com/features",
+                    "snippet": "Single sign-on (SSO)",
+                    "method": "list",
+                    "retrieved_at": "2026-11-12T11:45:10Z"
+                  }
+                ]
+              },
+              {
+                "name": "Audit logs",
+                "category": "Security",
+                "description": "",
+                "support": "unknown",
+                "plans": [],
+                "value": null,
+                "evidence": [
+                  {
+                    "source_url": "https://stripe.com/features",
+                    "snippet": "Audit logs",
+                    "method": "list",
+                    "retrieved_at": "2026-11-12T11:45:10Z"
+                  }
+                ]
+              },
+              {
+                "name": "Role-based access control",
+                "category": "Security",
+                "description": "",
+                "support": "unknown",
+                "plans": [],
+                "value": null,
+                "evidence": [
+                  {
+                    "source_url": "https://stripe.com/features",
+                    "snippet": "Role-based access control",
+                    "method": "list",
+                    "retrieved_at": "2026-11-12T11:45:10Z"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "missing_fields": [],
+        "warnings": []
+      },
+      "news": {},
+      "generic": {
+        "title": "Stripe Features",
+        "source_url": "https://stripe.com/features",
+        "summary": "## Analytics\n- Real-time dashboards\n- Competitor tracking\n- Custom alerts\n## Security\n- Single sign-on (SSO)\n- Audit logs\n- Role-based access control",
+        "headings": [
+          "Features",
+          "Analytics",
+          "Security"
+        ],
+        "product_details": [
+          {
+            "name": "Stripe Features",
+            "detail": "## Analytics\n- Real-time dashboards\n- Competitor tracking\n- Custom alerts\n## Security\n- Single sign-on (SSO)\n- Audit logs\n- Role-based access control",
+            "source_url": "https://stripe.com/features"
+          }
+        ],
+        "classification": {
+          "primary": "features",
+          "categories": [
+            "features",
+            "product"
+          ],
+          "confidence": 1.0,
+          "signals": [
+            "url:features",
+            "title:Features",
+            "heading:Features",
+            "text:Features"
+          ]
+        },
+        "text_length": 169
+      },
+      "snapshots": [
+        {
+          "url": "https://stripe.com/features",
+          "final_url": "https://stripe.com/features",
+          "title": "Stripe Features",
+          "meta_description": "Product capabilities available in Stripe.",
+          "headings": [
+            "Features",
+            "Analytics",
+            "Security"
+          ],
+          "text": "# Stripe Features\n\n## Analytics\n- Real-time dashboards\n- Competitor tracking\n- Custom alerts\n## Security\n- Single sign-on (SSO)\n- Audit logs\n- Role-based access control\n",
+          "html_length": 0,
+          "links": [
+            "https://stripe.com/pricing",
+            "https://stripe.com/changelog"
+          ],
+          "tables": [],
+          "lists": [
+            {
+              "heading": "Analytics",
+              "items": [
+                "Real-time dashboards",
+                "Competitor tracking",
+                "Custom alerts"
+              ]
+            },
+            {
+              "heading": "Security",
+              "items": [
+                "Single sign-on (SSO)",
+                "Audit logs",
+                "Role-based access control"
+              ]
+            }
+          ],
+          "billing_state": "default",
+          "interactions": [],
+          "status": "success",
+          "error": null,
+          "retrieval_method": "playwright",
+          "retrieved_at": "2026-11-12T11:45:10Z"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "url": "https://stripe.com/changelog",
+      "categories": [
+        "changelog"
+      ],
+      "classification": {
+        "primary": "changelog",
+        "categories": [
+          "changelog"
+        ],
+        "confidence": 1.0,
+        "signals": [
+          "url:changelog",
+          "title:Changelog",
+          "heading:Changelog",
+          "text:Changelog"
+        ]
+      },
+      "pricing": {},
+      "features": {},
+      "news": {
+        "target": "market_news",
+        "market_segment": null,
+        "source_url": "https://stripe.com/changelog",
+        "items": [
+          {
+            "title": "New analytics dashboard",
+            "url": "https://stripe.com/changelog",
+            "source": null,
+            "published_date": "2026-10-02",
+            "published_date_raw": "2026-10-02",
+            "summary": "Added real-time competitor tracking and custom alerts.",
+            "entities": [],
+            "sentiment_hint": null
+          },
+          {
+            "title": "Improved audit logs",
+            "url": "https://stripe.com/changelog",
+            "source": null,
+            "published_date": "2026-08-14",
+            "published_date_raw": "2026-08-14",
+            "summary": "Audit log retention increased and filters were improved.",
+            "entities": [],
+            "sentiment_hint": null
+          },
+          {
+            "title": "New analytics dashboard - Added real-time competitor tracking",
+            "url": "https://stripe.com/changelog",
+            "source": null,
+            "published_date": "2026-10-02",
+            "published_date_raw": "2026-10-02",
+            "summary": null,
+            "entities": [],
+            "sentiment_hint": null
+          },
+          {
+            "title": "Improved audit logs - retention increased",
+            "url": "https://stripe.com/changelog",
+            "source": null,
+            "published_date": "2026-08-14",
+            "published_date_raw": "2026-08-14",
+            "summary": null,
+            "entities": [],
+            "sentiment_hint": null
+          }
+        ],
+        "missing_fields": [],
+        "warnings": []
+      },
+      "generic": {
+        "title": "Stripe Changelog",
+        "source_url": "https://stripe.com/changelog",
+        "summary": "2026-10-02 New analytics dashboard\nAdded real-time competitor tracking and custom alerts.\n\n2026-08-14 Improved audit logs\nAudit log retention increased and filters were improved.",
+        "headings": [
+          "Changelog",
+          "Recent updates"
+        ],
+        "product_details": [
+          {
+            "name": "Stripe Changelog",
+            "detail": "2026-10-02 New analytics dashboard\nAdded real-time competitor tracking and custom alerts.\n\n2026-08-14 Improved audit logs\nAudit log retention increased and filters were improved.",
+            "source_url": "https://stripe.com/changelog"
+          }
+        ],
+        "classification": {
+          "primary": "changelog",
+          "categories": [
+            "changelog"
+          ],
+          "confidence": 1.0,
+          "signals": [
+            "url:changelog",
+            "title:Changelog",
+            "heading:Changelog",
+            "text:Changelog"
+          ]
+        },
+        "text_length": 218
+      },
+      "snapshots": [
+        {
+          "url": "https://stripe.com/changelog",
+          "final_url": "https://stripe.com/changelog",
+          "title": "Stripe Changelog",
+          "meta_description": "Recent product updates from Stripe.",
+          "headings": [
+            "Changelog",
+            "Recent updates"
+          ],
+          "text": "# Stripe Changelog\n\n## Recent updates\n\n2026-10-02 New analytics dashboard\nAdded real-time competitor tracking and custom alerts.\n\n2026-08-14 Improved audit logs\nAudit log retention increased and filters were improved.\n",
+          "html_length": 0,
+          "links": [
+            "https://stripe.com/pricing",
+            "https://stripe.com/features"
+          ],
+          "tables": [],
+          "lists": [
+            {
+              "heading": "Recent updates",
+              "items": [
+                "2026-10-02 New analytics dashboard - Added real-time competitor tracking",
+                "2026-08-14 Improved audit logs - retention increased"
+              ]
+            }
+          ],
+          "billing_state": "default",
+          "interactions": [],
+          "status": "success",
+          "error": null,
+          "retrieval_method": "playwright",
+          "retrieved_at": "2026-11-12T11:45:10Z"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "url": "https://stripe.com/about",
+      "categories": [
+        "company"
+      ],
+      "classification": {
+        "primary": "company",
+        "categories": [
+          "company"
+        ],
+        "confidence": 1.0,
+        "signals": [
+          "url:about",
+          "title:About",
+          "heading:About",
+          "text:Our mission"
+        ]
+      },
+      "pricing": {},
+      "features": {},
+      "news": {},
+      "generic": {
+        "title": "About Stripe",
+        "source_url": "https://stripe.com/about",
+        "summary": "Stripe builds competitive intelligence software for product, marketing, and strategy teams.\n\nOur mission is to make market changes visible and actionable.",
+        "headings": [
+          "About us",
+          "Our mission"
+        ],
+        "product_details": [
+          {
+            "name": "About Stripe",
+            "detail": "Stripe builds competitive intelligence software for product, marketing, and strategy teams.\n\nOur mission is to make market changes visible and actionable.",
+            "source_url": "https://stripe.com/about"
+          }
+        ],
+        "classification": {
+          "primary": "company",
+          "categories": [
+            "company"
+          ],
+          "confidence": 1.0,
+          "signals": [
+            "url:about",
+            "title:About",
+            "heading:About",
+            "text:Our mission"
+          ]
+        },
+        "text_length": 171
+      },
+      "snapshots": [
+        {
+          "url": "https://stripe.com/about",
+          "final_url": "https://stripe.com/about",
+          "title": "About Stripe",
+          "meta_description": "About Stripe.",
+          "headings": [
+            "About us",
+            "Our mission"
+          ],
+          "text": "# About Stripe\n\nStripe builds competitive intelligence software for product, marketing, and strategy teams.\n\nOur mission is to make market changes visible and actionable.\n",
+          "html_length": 0,
+          "links": [
+            "https://stripe.com/pricing",
+            "https://stripe.com/features"
+          ],
+          "tables": [],
+          "lists": [],
+          "billing_state": "default",
+          "interactions": [],
+          "status": "success",
+          "error": null,
+          "retrieval_method": "playwright",
+          "retrieved_at": "2026-11-12T11:45:10Z"
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "stats": {
+    "discovered": 4,
+    "crawled": 4,
+    "skipped_unchanged": 0,
+    "reused_cached": 0,
+    "failed": 0,
+    "changes": 0,
+    "interactions": 0,
+    "start_time": "2026-11-12T11:45:10Z",
+    "end_time": "2026-11-12T11:45:10Z"
+  },
+  "changes": [],
+  "warnings": []
+}

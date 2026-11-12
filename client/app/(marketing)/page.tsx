@@ -29,15 +29,6 @@ export const metadata: Metadata = {
     "Nexus Intel continuously discovers competitor price changes, product launches, and off-site mentions — then turns them into structured intelligence your team can act on.",
 };
 
-const trustedNames = [
-  { name: "NORTHSTAR", className: "font-semibold tracking-[0.16em]" },
-  { name: "Fable", className: "font-semibold tracking-[-0.04em] text-[16px]" },
-  { name: "MERIDIAN", className: "font-medium tracking-[0.2em]" },
-  { name: "Arc", className: "font-semibold tracking-[-0.06em] text-[17px]" },
-  { name: "clearscope", className: "font-medium tracking-[-0.02em]" },
-  { name: "OPAL", className: "font-semibold tracking-[0.22em]" },
-];
-
 const solutions = [
   {
     icon: TrendingUp,
@@ -123,22 +114,6 @@ export default function MarketingPage() {
                 </span>
                 <span className="h-3 w-px bg-slate-200" />
                 <span>No credit card required</span>
-              </div>
-            </div>
-
-            <div className="mt-14 sm:mt-16">
-              <p className="text-center text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">
-                Built for market teams at
-              </p>
-              <div className="mx-auto mt-5 flex max-w-3xl flex-wrap items-center justify-center gap-x-9 gap-y-4 text-slate-400 sm:gap-x-12">
-                {trustedNames.map((brand) => (
-                  <span
-                    key={brand.name}
-                    className={cn("text-[13px] transition-colors hover:text-slate-500", brand.className)}
-                  >
-                    {brand.name}
-                  </span>
-                ))}
               </div>
             </div>
 
@@ -450,20 +425,6 @@ export default function MarketingPage() {
                   >
                     View live demo
                   </Link>
-                </div>
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[10px] text-slate-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    14-day trial
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    No credit card
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    SOC 2 Type II
-                  </span>
                 </div>
               </div>
             </div>

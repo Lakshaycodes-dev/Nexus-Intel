@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { Logo, NexusMark } from "@/components/logo";
+import { ApiStatus } from "@/components/dashboard/api-status";
 import { cn } from "@/lib/utils";
 
 const primaryNav = [
@@ -280,6 +281,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <ApiStatus className="hidden sm:inline-flex" />
             <div className="hidden h-9 w-[230px] items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 text-slate-400 transition focus-within:border-indigo-200 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/10 md:flex xl:w-[280px]">
               <Search className="h-3.5 w-3.5" />
               <input

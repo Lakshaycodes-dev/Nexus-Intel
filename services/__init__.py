@@ -1,1 +1,1 @@
-"""TinyFish API clients and prompt contracts for Nexus Intel."""
+"""Playwright collection pipeline, Gemini extraction and prompt contracts."""

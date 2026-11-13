@@ -11,6 +11,8 @@ New backend-specific variables (placeholders only in ``.env.example``):
 * ``MONGODB_COLLECTION``           - Collection holding analysis records.
 * ``MONGODB_SERVER_SELECTION_TIMEOUT_MS`` - Driver timeout used for the
   startup connectivity probe (keeps the app bootable when MongoDB is down).
+* ``IN_MEMORY_PERSISTENCE``         - Use an in-process analysis/tracking store
+  when MongoDB is unavailable (defaults to mock mode).
 * ``CORS_ORIGINS``                 - Comma-separated list of allowed origins
   for the frontend dev server.
 * ``ANALYSIS_TIMEOUT_SECONDS``     - Hard timeout around one pipeline run.
@@ -65,6 +67,22 @@ MONGODB_DATABASE: str = os.getenv("MONGODB_DATABASE", "nexus_intel").strip()
 MONGODB_COLLECTION: str = os.getenv("MONGODB_COLLECTION", "analyses").strip()
 MONGODB_SERVER_SELECTION_TIMEOUT_MS: int = _as_int(
     os.getenv("MONGODB_SERVER_SELECTION_TIMEOUT_MS", "2000"), 2000
+)
+# Tracking collections (minimal additive change; existing collections preserved).
+MONGODB_PAGE_REGISTRY_COLLECTION: str = os.getenv(
+    "MONGODB_PAGE_REGISTRY_COLLECTION", "page_registry"
+).strip()
+MONGODB_SNAPSHOTS_COLLECTION: str = os.getenv(
+    "MONGODB_SNAPSHOTS_COLLECTION", "page_snapshots"
+).strip()
+MONGODB_CHANGE_EVENTS_COLLECTION: str = os.getenv(
+    "MONGODB_CHANGE_EVENTS_COLLECTION", "change_events"
+).strip()
+# Local/demo fallback: keep analysis records in-process when MongoDB is down.
+# Defaults to mock-mode behaviour; set explicitly to override.
+IN_MEMORY_PERSISTENCE: bool = _as_bool(
+    os.getenv("IN_MEMORY_PERSISTENCE", "true" if MOCK_MODE else "false"),
+    default=MOCK_MODE,
 )
 
 # --- HTTP / CORS ----------------------------------------------------------- #

@@ -36,9 +36,9 @@ logger = logging.getLogger("nexus_intel.api")
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Connect MongoDB on startup, close it on shutdown.
 
-    A down database must not prevent the API from booting: the health endpoint
-    reports ``"database": "unavailable"`` and persistence endpoints return a
-    503 envelope instead of crashing.
+    A down database must not prevent the API from booting. In mock mode the
+    analysis repository falls back to an in-process store so local demos still
+    work; outside mock mode persistence endpoints return a 503 envelope.
     """
     try:
         await database.connect_db()

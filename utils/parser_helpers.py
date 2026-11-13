@@ -2,9 +2,9 @@
 
 Two jobs live here:
 
-1. **Normalisation** - clean raw TinyFish markdown before it is sent to Gemini
-   (code fences, NBSP, runaway whitespace, truncation) so the prompt contains
-   only signal.
+1. **Normalisation** - clean the collected Markdown report before it is sent to
+   Gemini (code fences, NBSP, runaway whitespace, truncation) so the prompt
+   contains only signal.
 2. **Fallback extraction** - best-effort, pure-Python extractors used when the
    LLM path fails (API outage, malformed JSON after repair attempts). They
    produce schema-shaped ``dict`` payloads that are still validated by Pydantic,

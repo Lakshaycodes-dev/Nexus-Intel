@@ -1,4 +1,5 @@
-"""Shared validation, parsing, and markdown-normalisation helpers.""
+"""Shared validation, parsing, and markdown-normalisation helpers."""
+
 from .parser_helpers import (
     MarkdownTable,
     clean_markdown,
@@ -42,4 +43,3 @@ __all__ = [
     "table_to_records",
     "truncate_markdown",
 ]
-

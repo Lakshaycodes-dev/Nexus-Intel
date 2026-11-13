@@ -1,8 +1,8 @@
 """Target validation and SSRF safeguards for user-supplied domains/URLs.
 
-The current pipeline fetches pages through the *remote* TinyFish API rather
-than from this server, so the direct SSRF surface is small. Even so, every
-domain/URL accepted from API clients is validated here so that:
+The collection pipeline fetches pages from this server with Playwright/httpx,
+so every domain/URL accepted from API clients is validated here before any
+browser navigation starts. This ensures:
 
 * malformed input is rejected with a clear 422 before any work starts;
 * requests for private, loopback, link-local or otherwise internal addresses

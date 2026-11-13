@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { competitors } from "@/lib/data";
 import { MetricCard } from "@/components/dashboard/metric-card";
-import { CompetitorCard } from "@/components/dashboard/competitor-card";
+import { LiveCompetitors } from "@/components/dashboard/live-competitors";
+import { RecentScans } from "@/components/dashboard/recent-scans";
 import { SignalFeed } from "@/components/dashboard/signal-feed";
 import { Scanner } from "@/components/scanner";
 import { buttonVariants } from "@/components/ui/button";
@@ -115,6 +116,8 @@ export default function DashboardPage() {
         <Scanner variant="panel" />
       </section>
 
+      <RecentScans />
+
       <div className="mt-7 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_356px]">
         <section id="competitors" className="scroll-mt-24">
           <div className="flex items-end justify-between gap-4">
@@ -140,11 +143,7 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
-            {competitors.map((competitor) => (
-              <CompetitorCard key={competitor.id} competitor={competitor} />
-            ))}
-          </div>
+          <LiveCompetitors initialCompetitors={competitors} />
         </section>
 
         <SignalFeed />

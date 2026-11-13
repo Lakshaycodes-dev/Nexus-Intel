@@ -25,7 +25,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { competitors, myProduct } from "@/lib/data";
+import { competitors as staticCompetitors, myProduct } from "@/lib/data";
+import { useLiveCompetitors } from "@/lib/use-live-competitors";
 import type { Competitor } from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -304,6 +305,7 @@ function ValueCell({
 const initialSelection = ["trackline", "compass-hq", "signalcraft"];
 
 export function CompareWorkspace() {
+  const { competitors, loading, liveCount } = useLiveCompetitors(staticCompetitors);
   const [selectedIds, setSelectedIds] = useState<string[]>(initialSelection);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -334,7 +336,7 @@ export function CompareWorkspace() {
         const competitor = competitors.find((item) => item.id === id);
         return competitor ? [competitor] : [];
       }),
-    [selectedIds],
+    [selectedIds, competitors],
   );
 
   const groups = useMemo(
@@ -406,6 +408,19 @@ export function CompareWorkspace() {
               <Badge variant="brand" className="text-[8px]">
                 {selected.length + 1} / 5 products
               </Badge>
+              <span className="inline-flex items-center gap-1 text-[8px] text-slate-400">
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    loading
+                      ? "animate-pulse-soft bg-indigo-400"
+                      : liveCount > 0
+                        ? "bg-emerald-500"
+                        : "bg-slate-300",
+                  )}
+                />
+                {loading ? "syncing API" : liveCount > 0 ? `${liveCount} live` : "cached"}
+              </span>
             </div>
             <p className="mt-1 text-[10.5px] text-slate-500">
               Select up to four competitors to compare against your product.

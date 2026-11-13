@@ -1,11 +1,12 @@
-"""Adapter between the HTTP API and the existing orchestrator pipeline.
+"""Adapter between the HTTP API and the collection pipeline.
 
 The pipeline's real entry point (see ``orchestrator.py``) is::
 
-    async def run_pipeline(query: str, mock: bool = MOCK_MODE) -> Path
+    async def run_pipeline(query: str, mock: bool = MOCK_MODE, *, domain=None) -> Path
 
-It performs Search -> Web Agent -> Fetch and returns the path of a combined
-Markdown report written to ``output/``. This module:
+It performs website discovery -> Playwright collection -> deterministic
+extraction and returns the path of a combined Markdown report written to
+``output/``. This module:
 
 1. awaits ``run_pipeline`` (it is already async - the event loop is never
    blocked, and no extra thread is needed for the pipeline itself);
@@ -30,14 +31,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-# Import the *existing* pipeline entry point - not an invented one.
+# Import the *existing* pipeline entry point - now backed by Playwright.
 from orchestrator import run_pipeline
 from schemas.pydantic_schemas import TARGET_SCHEMAS, ExtractionTarget
+from services.collection.pipeline import CollectionError
 from services.gemini_service import GeminiService, ExtractionError
-from services.tinyfish_fetch import TinyFishFetchError
-from services.tinyfish_search import TinyFishSearchError
 from utils import parser_helpers as ph
 
+from app import database
 from app.errors import PipelineExecutionError
 from app.schemas import AnalysisParameters
 
@@ -167,37 +168,43 @@ def _money_display(*values: Any) -> str:
 def _map_pricing(pricing_model: Any) -> list[dict[str, Any]]:
     """PricingMatrix -> frontend ``pricing`` rows.
 
-    The heuristic fallback parser can emit non-enum ``billing_period`` values
-    (e.g. ``"$0"`` when it misreads a table column), so anything that is not a
-    recognised *annual* period is presented as the monthly price - matching the
-    competitor pages the pipeline fetches ("Monthly price" columns).
+    Monthly and annual snapshots are merged into one row per tier so the
+    frontend receives both prices instead of duplicate plans. The heuristic
+    fallback parser can emit non-enum ``billing_period`` values (e.g. the raw
+    price cell), so the display text is also inspected.
     """
     dump = _model_dump(pricing_model)
-    rows: list[dict[str, Any]] = []
+    rows: dict[str, dict[str, Any]] = {}
     for plan in dump.get("plans") or []:
-        billing = (plan.get("billing_period") or "monthly").lower()
+        billing = (plan.get("billing_period") or "").lower()
         display = _money_display(plan.get("price_display"), plan.get("price"))
-        if display and not str(display).startswith(("$", "€", "£", "¥")):
+        if not display:
+            continue
+        if not str(display).startswith(("$", "€", "£", "¥")):
             display = f"${display}"
-        annual = display if billing == "annual" else ""
-        monthly = "" if annual else display
+        annual = billing in {"annual", "yearly"} or bool(
+            re.search(r"/\s*(?:yr|year)\b|per\s+year|annually", str(display), re.IGNORECASE)
+        )
+
+        name = plan.get("name") or "Unnamed tier"
+        row = rows.setdefault(
+            str(name).strip().lower(),
+            {"tier": name, "monthly": "", "annual": "", "features": []},
+        )
+        if annual:
+            row["annual"] = display
+        else:
+            row["monthly"] = display
 
         # The fallback parser may echo the price/seats cells into
         # ``included_features``; drop entries identical to the price display.
-        features = [
-            str(feature)
-            for feature in plan.get("included_features") or []
-            if str(feature) != display
-        ]
-        rows.append(
-            {
-                "tier": plan.get("name") or "Unnamed tier",
-                "monthly": monthly,
-                "annual": annual,
-                "features": features,
-            }
-        )
-    return rows
+        for feature in plan.get("included_features") or []:
+            text = str(feature).strip()
+            if not text or text == display:
+                continue
+            if text not in row["features"]:
+                row["features"].append(text)
+    return list(rows.values())
 
 
 def _map_news(news_model: Any) -> list[dict[str, Any]]:
@@ -217,19 +224,31 @@ def _map_news(news_model: Any) -> list[dict[str, Any]]:
     return rows
 
 
-def _map_capabilities(features_model: Any) -> list[dict[str, Any]]:
+def _map_capabilities(
+    features_model: Any,
+    *,
+    plan_names: Optional[set[str]] = None,
+) -> list[dict[str, Any]]:
     """FeatureComparison -> frontend ``capabilities`` rows.
 
     The frontend compares "traditional scraper" vs "Nexus-Intel"; anything the
-    pipeline actually extracted is marked as handled by Nexus-Intel.
+    pipeline actually extracted is marked as handled by Nexus-Intel. Pricing
+    tables can be misread as feature tables by the heuristic fallback, so plan
+    names are filtered out.
     """
     dump = _model_dump(features_model)
     rows: list[dict[str, Any]] = []
+    excluded = plan_names or set()
+    seen: set[str] = set()
     for category in dump.get("categories") or []:
         for feature in category.get("features") or []:
             name = feature.get("name")
             if not name:
                 continue
+            key = str(name).strip().lower()
+            if key in excluded or key in seen:
+                continue
+            seen.add(key)
             rows.append(
                 {
                     "name": name,
@@ -249,16 +268,23 @@ def build_competitor_data(
     pricing: list[dict[str, Any]] = []
     offsite_news: list[dict[str, Any]] = []
     capabilities: list[dict[str, Any]] = []
+    plan_names: set[str] = set()
 
     for result in extractions:
         if result.model is None:
             continue
         if result.target == ExtractionTarget.PRICING_MATRIX.value:
             pricing = _map_pricing(result.model)
+            plan_names = {row["tier"].strip().lower() for row in pricing if row.get("tier")}
         elif result.target == ExtractionTarget.MARKET_NEWS.value:
             offsite_news = _map_news(result.model)
-        elif result.target == ExtractionTarget.FEATURE_COMPARISON.value:
-            capabilities = _map_capabilities(result.model)
+
+    for result in extractions:
+        if result.model is None:
+            continue
+        if result.target == ExtractionTarget.FEATURE_COMPARISON.value:
+            capabilities = _map_capabilities(result.model, plan_names=plan_names)
+            break
 
     return {
         "domain": domain,
@@ -271,14 +297,9 @@ def build_competitor_data(
 
 def _translate_pipeline_error(exc: Exception) -> PipelineExecutionError:
     """Map pipeline exceptions to a safe client-facing message (no internals)."""
-    if isinstance(exc, TinyFishSearchError):
-        return PipelineExecutionError(
-            "The upstream search service could not be reached."
-        )
-    if isinstance(exc, TinyFishFetchError):
-        return PipelineExecutionError(
-            "The upstream fetch service could not retrieve the competitor page."
-        )
+    if isinstance(exc, CollectionError):
+        message = str(exc) or "The collection pipeline could not gather competitor pages."
+        return PipelineExecutionError(message)
     if isinstance(exc, RuntimeError):
         return PipelineExecutionError(str(exc))
     logger.exception("Unexpected pipeline failure: %s", type(exc).__name__)
@@ -297,10 +318,16 @@ async def run_analysis(
     the failure and return a consistent 502 envelope.
     """
     started = time.perf_counter()
+    tracking_store = database.get_tracking_store()
 
     try:
-        report_path: Path = await run_pipeline(query, mock=mock)
-    except (TinyFishSearchError, TinyFishFetchError, RuntimeError, ValueError) as exc:
+        report_path: Path = await run_pipeline(
+            query,
+            mock=mock,
+            domain=domain,
+            tracking_store=tracking_store,
+        )
+    except (CollectionError, RuntimeError, ValueError) as exc:
         raise _translate_pipeline_error(exc) from exc
 
     report_markdown = report_path.read_text(encoding="utf-8")

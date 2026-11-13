@@ -8,6 +8,8 @@ Design notes
   degrades the health check to ``"unavailable"`` instead of blocking boot.
 * All queries go through :class:`AnalysisRepository`, keeping route handlers
   free of database details (see ``app/routers/``).
+* Mock-mode local runs can fall back to :class:`InMemoryAnalysisRepository`
+  when MongoDB is unavailable; restarting the API clears those records.
 """
 
 from __future__ import annotations
@@ -26,6 +28,9 @@ logger = logging.getLogger("nexus_intel.db")
 
 _client: Optional[AsyncIOMotorClient] = None
 _database: Optional[AsyncIOMotorDatabase] = None
+_memory_repository: Optional["InMemoryAnalysisRepository"] = None
+_memory_tracking_store: Optional[Any] = None
+_memory_fallback_logged = False
 
 
 def utcnow() -> datetime:
@@ -81,17 +86,92 @@ def get_database() -> AsyncIOMotorDatabase:
     return _database
 
 
-def get_repository() -> "AnalysisRepository":
+def get_tracking_store() -> Optional[Any]:
+    """Return the active tracking store (MongoDB or shared in-memory fallback).
+
+    Imports are lazy so ``services.collection`` stays independent of Motor. A
+    process-global in-memory store keeps incremental crawling/change detection
+    working during local no-Mongo demos; it resets with the server.
+    """
+    global _memory_tracking_store
+
+    if _database is not None:
+        from services.collection.tracking import MongoTrackingStore
+
+        return MongoTrackingStore(
+            _database,
+            registry_collection=config.MONGODB_PAGE_REGISTRY_COLLECTION,
+            snapshots_collection=config.MONGODB_SNAPSHOTS_COLLECTION,
+            changes_collection=config.MONGODB_CHANGE_EVENTS_COLLECTION,
+        )
+    if not config.IN_MEMORY_PERSISTENCE:
+        return None
+
+    if _memory_tracking_store is None:
+        from services.collection.tracking import InMemoryTrackingStore
+
+        _memory_tracking_store = InMemoryTrackingStore()
+    return _memory_tracking_store
+
+
+class InMemoryAnalysisRepository:
+    """Process-local fallback used when MongoDB is unavailable in mock mode.
+
+    Records survive for the lifetime of the server process only. This keeps the
+    API and frontend usable for local demos without silently pretending MongoDB
+    is connected.
+    """
+
+    def __init__(self) -> None:
+        self._records: dict[str, dict[str, Any]] = {}
+
+    async def create(self, record: dict[str, Any]) -> None:
+        self._records[record["analysis_id"]] = dict(record)
+
+    async def update(self, analysis_id: str, changes: dict[str, Any]) -> None:
+        record = self._records.get(analysis_id)
+        if record is not None:
+            record.update({**changes, "updated_at": utcnow()})
+
+    async def get_by_id(self, analysis_id: str) -> Optional[dict[str, Any]]:
+        record = self._records.get(analysis_id)
+        return dict(record) if record is not None else None
+
+    async def get_latest_by_domain(self, domain: str) -> Optional[dict[str, Any]]:
+        matches = [
+            record for record in self._records.values() if record.get("domain") == domain
+        ]
+        if not matches:
+            return None
+        return dict(max(matches, key=lambda record: record["created_at"]))
+
+
+def get_repository() -> "Any":
     """FastAPI dependency yielding a repository bound to the live connection.
 
-    Raises ``DatabaseUnavailableError`` (-> 503 envelope) when MongoDB is not
-    connected, so routers never see a bare RuntimeError.
+    When MongoDB is down, mock mode uses an in-memory repository so the product
+    remains runnable locally (data resets on restart). Otherwise this raises
+    ``DatabaseUnavailableError`` (-> 503 envelope), so routers never see a bare
+    RuntimeError.
     """
-    from app.errors import DatabaseUnavailableError
+    global _memory_repository, _memory_fallback_logged
 
-    if _database is None:
+    if _database is not None:
+        return AnalysisRepository(_database)
+    if not config.IN_MEMORY_PERSISTENCE:
+        from app.errors import DatabaseUnavailableError
+
         raise DatabaseUnavailableError()
-    return AnalysisRepository(_database)
+
+    if _memory_repository is None:
+        _memory_repository = InMemoryAnalysisRepository()
+    if not _memory_fallback_logged:
+        logger.warning(
+            "MongoDB is unavailable; using the in-memory analysis store. "
+            "Analysis records will not survive a server restart."
+        )
+        _memory_fallback_logged = True
+    return _memory_repository
 
 
 async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
@@ -105,6 +185,30 @@ async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
         name="domain_created_at",
     )
     await collection.create_index([("status", ASCENDING)], name="status")
+
+    # Additive tracking indexes. The MongoTrackingStore also ensures these
+    # lazily, but creating them at startup keeps first-run latency predictable.
+    registry = db[config.MONGODB_PAGE_REGISTRY_COLLECTION]
+    await registry.create_index(
+        [("competitor", ASCENDING), ("url", ASCENDING)],
+        unique=True,
+        name="page_registry_competitor_url",
+    )
+    await registry.create_index(
+        [("competitor", ASCENDING), ("last_crawl_at", DESCENDING)],
+        name="page_registry_last_crawl",
+    )
+    snapshots = db[config.MONGODB_SNAPSHOTS_COLLECTION]
+    await snapshots.create_index(
+        [("competitor", ASCENDING), ("url", ASCENDING), ("content_hash", ASCENDING)],
+        unique=True,
+        name="page_snapshot_unique",
+    )
+    changes = db[config.MONGODB_CHANGE_EVENTS_COLLECTION]
+    await changes.create_index(
+        [("competitor", ASCENDING), ("detected_at", DESCENDING)],
+        name="change_events_competitor_time",
+    )
 
 
 class AnalysisRepository:

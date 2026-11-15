@@ -12,6 +12,7 @@
  */
 
 import type { ScopeKey } from "./types";
+import { readStoredToken } from "./token";
 
 const DEFAULT_API_URL = "http://localhost:8000";
 
@@ -58,6 +59,8 @@ export interface CompetitorData {
   offsiteNews: NewsEntry[];
   capabilities: CapabilityEntry[];
   executionTimeSec: number;
+  /** Per-target provenance: "gemini" (LLM) or "fallback" (heuristic). */
+  provenance?: Record<string, string>;
 }
 
 export interface ExtractionSummary {
@@ -126,6 +129,49 @@ export interface HealthResponse {
   timestamp: string;
 }
 
+// --- Auth + workspace contracts -------------------------------------------- //
+
+export interface AuthUser {
+  user_id: string;
+  email: string;
+  name: string;
+  workspace_name: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: "bearer";
+  expires_in: number;
+  user: AuthUser;
+}
+
+export interface RegisterInput {
+  name: string;
+  email: string;
+  password: string;
+  workspace_name?: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface CompetitorListEntry {
+  domain: string;
+  analysis_id: string;
+  status: AnalysisStatus;
+  created_at: string;
+  updated_at: string;
+  has_data: boolean;
+}
+
+export interface CompetitorListResponse {
+  competitors: CompetitorListEntry[];
+  total: number;
+}
+
 interface ApiValidationDetail {
   loc: string[];
   message: string;
@@ -186,13 +232,21 @@ function defaultMessageForStatus(status: number): string {
 
 interface RequestOptions extends RequestInit {
   timeoutMs?: number;
+  /** Override the stored token (used by server components). */
+  token?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const ANALYZE_TIMEOUT_MS = 310_000;
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, headers, ...init } = options;
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+    headers,
+    token,
+    ...init
+  } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -205,6 +259,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     const requestHeaders = new Headers(headers);
     requestHeaders.set("Accept", "application/json");
     if (init.body) requestHeaders.set("Content-Type", "application/json");
+
+    const accessToken = token ?? readStoredToken();
+    if (accessToken) {
+      requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+    }
 
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
       ...init,
@@ -247,6 +306,46 @@ export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return request<HealthResponse>("/health", { timeoutMs: 5_000, signal });
 }
 
+// --- Auth ------------------------------------------------------------------ //
+
+export function registerAccount(
+  input: RegisterInput,
+  signal?: AbortSignal,
+): Promise<AuthResponse> {
+  return request<AuthResponse>("/api/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+    signal,
+  });
+}
+
+export function loginAccount(
+  input: LoginInput,
+  signal?: AbortSignal,
+): Promise<AuthResponse> {
+  return request<AuthResponse>("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify(input),
+    signal,
+  });
+}
+
+export function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
+  return request<AuthUser>("/api/v1/auth/me", { signal });
+}
+
+export function logoutAccount(): Promise<void> {
+  return request<void>("/api/v1/auth/logout", { method: "POST" });
+}
+
+// --- Workspace ------------------------------------------------------------- //
+
+export function listCompetitors(
+  signal?: AbortSignal,
+): Promise<CompetitorListResponse> {
+  return request<CompetitorListResponse>("/api/v1/competitors", { signal });
+}
+
 export function analyzeCompetitor(
   input: AnalyzeRequest,
   signal?: AbortSignal,
@@ -277,10 +376,11 @@ export function getAnalysis(
 export function getCompetitor(
   competitorIdOrDomain: string,
   signal?: AbortSignal,
+  token?: string,
 ): Promise<CompetitorResponse> {
   return request<CompetitorResponse>(
     `/api/v1/competitors/${encodeURIComponent(competitorIdOrDomain)}`,
-    { signal },
+    { signal, token },
   );
 }
 

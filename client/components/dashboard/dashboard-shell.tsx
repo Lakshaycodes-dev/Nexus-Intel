@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -13,6 +13,8 @@ import {
   Command,
   Compass,
   LayoutDashboard,
+  LogIn,
+  LogOut,
   Menu,
   Plus,
   Radar,
@@ -23,7 +25,9 @@ import {
 } from "lucide-react";
 import { Logo, NexusMark } from "@/components/logo";
 import { ApiStatus } from "@/components/dashboard/api-status";
-import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
+import type { AuthUser } from "@/lib/api";
+import { cn, initials } from "@/lib/utils";
 
 const primaryNav = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard, badge: null },
@@ -40,10 +44,18 @@ const secondaryNav = [
 function SidebarContent({
   pathname,
   onNavigate,
+  user,
+  onSignOut,
 }: {
   pathname: string;
   onNavigate?: () => void;
+  user: AuthUser | null;
+  onSignOut: () => void;
 }) {
+  const workspaceName = user?.workspace_name || "Demo workspace";
+  const personName = user?.name || "Guest demo";
+  const userInitials = initials(user?.name || "") || "NI";
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-[68px] shrink-0 items-center justify-between px-5">
@@ -66,13 +78,13 @@ function SidebarContent({
           className="mt-1 flex w-full items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/60 px-2.5 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-[10px] font-semibold text-white">
-            A
+            {(workspaceName[0] ?? "W").toUpperCase()}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[11px] font-semibold text-slate-800">
-              Acme Corp
+              {workspaceName}
             </span>
-            <span className="block truncate text-[9px] text-slate-400">Growth workspace</span>
+            <span className="block truncate text-[9px] text-slate-400">Retail workspace</span>
           </span>
           <ChevronDown className="h-3 w-3 text-slate-400" />
         </button>
@@ -178,22 +190,47 @@ function SidebarContent({
       </div>
 
       <div className="border-t border-slate-200/70 p-3">
-        <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 text-[10px] font-semibold text-white shadow-sm">
-            AL
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold text-slate-800">Alex Laurent</p>
-            <p className="truncate text-[9px] text-slate-400">Command plan</p>
+        {user ? (
+          <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 text-[10px] font-semibold text-white shadow-sm">
+              {userInitials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] font-semibold text-slate-800">{personName}</p>
+              <p className="truncate text-[9px] text-slate-400">
+                {user.email || "Signed in"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onSignOut}
+              aria-label="Sign out"
+              title="Sign out"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
           </div>
+        ) : (
           <Link
-            href="/dashboard"
-            aria-label="Account settings"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            href="/login?next=/dashboard"
+            onClick={onNavigate}
+            className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/60 px-2.5 py-2 transition hover:border-indigo-200 hover:bg-indigo-50/60"
           >
-            <Settings className="h-3.5 w-3.5" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600">
+              <LogIn className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11px] font-semibold text-slate-800">
+                Sign in
+              </span>
+              <span className="block truncate text-[9px] text-slate-400">
+                Save scans to your workspace
+              </span>
+            </span>
+            <ChevronRight className="h-3 w-3 text-slate-400" />
           </Link>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -201,7 +238,15 @@ function SidebarContent({
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const userInitials = initials(user?.name || "") || "NI";
+
+  async function handleSignOut() {
+    await signOut();
+    router.replace("/login");
+  }
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -222,7 +267,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         data-print-hide
         className="fixed inset-y-0 left-0 z-40 hidden w-[260px] border-r border-slate-200/80 bg-white/90 backdrop-blur-xl lg:block"
       >
-        <SidebarContent pathname={pathname} />
+        <SidebarContent
+          pathname={pathname}
+          user={user}
+          onSignOut={handleSignOut}
+        />
       </aside>
 
       <AnimatePresence>
@@ -244,7 +293,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               transition={{ type: "spring", damping: 30, stiffness: 320 }}
               className="relative h-full w-[268px] border-r border-slate-200 bg-white shadow-2xl"
             >
-              <SidebarContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+              <SidebarContent
+                pathname={pathname}
+                onNavigate={() => setMobileOpen(false)}
+                user={user}
+                onSignOut={handleSignOut}
+              />
             </motion.aside>
           </div>
         ) : null}
@@ -311,11 +365,39 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-white" />
             </button>
 
-            <div className="ml-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 text-[10px] font-semibold text-white shadow-sm ring-2 ring-white">
-              AL
-            </div>
+            {user ? (
+              <div className="ml-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 text-[10px] font-semibold text-white shadow-sm ring-2 ring-white">
+                {userInitials}
+              </div>
+            ) : (
+              <Link
+                href="/login?next=/dashboard"
+                className="ml-0.5 flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Sign in
+              </Link>
+            )}
           </div>
         </header>
+
+        {!loading && !user ? (
+          <div data-print-hide className="border-b border-indigo-100 bg-indigo-50/70 px-4 py-2 sm:px-6">
+            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2 text-[11px] text-indigo-800">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                You&apos;re exploring the demo workspace. Sign in to run live scans and
+                save them to your account.
+              </span>
+              <Link
+                href="/login?next=/dashboard"
+                className="shrink-0 font-semibold text-indigo-700 transition hover:text-indigo-900"
+              >
+                Sign in →
+              </Link>
+            </div>
+          </div>
+        ) : null}
 
         <main className="min-h-[calc(100vh-64px)]">{children}</main>
       </div>

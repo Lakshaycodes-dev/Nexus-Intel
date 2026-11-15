@@ -4,6 +4,7 @@
  */
 
 import { accentFor } from "./accents";
+import { formatCurrency } from "./utils";
 import type {
   AnalysisRecord,
   CapabilityEntry,
@@ -24,7 +25,7 @@ import type {
 
 const DEFAULT_COMPARISON: ComparisonProfile = {
   refreshMinutes: 1440,
-  coverage: "Web + news",
+  coverage: "Online + stores",
   retentionMonths: 12,
   freeTrialDays: 0,
   sso: false,
@@ -86,10 +87,10 @@ function toPricingTier(entry: PricingEntry, index: number, total: number): Prici
     name: entry.tier || `Tier ${index + 1}`,
     description:
       index === 0
-        ? "Entry plan resolved from the public pricing page."
+        ? "Entry price band resolved from the public catalogue."
         : index === total - 1
-          ? "Top published plan in the latest scan."
-          : "Mid-tier published plan in the latest scan.",
+          ? "Premium price band in the latest scan."
+          : "Mainstream price band in the latest scan.",
     monthly,
     annualMonthly,
     features: Array.isArray(entry.features) ? entry.features : [],
@@ -186,22 +187,22 @@ export function competitorFromData(
       : (prices[0] ?? fallback?.proPrice ?? 0);
   const tierRange =
     prices.length > 0
-      ? `$${Math.min(...prices)}–$${Math.max(...prices)}`
+      ? `${formatCurrency(Math.min(...prices))}–${formatCurrency(Math.max(...prices))}`
       : (fallback?.tierRange ?? "Not extracted");
 
   const activity = pricing.length + news.length + capabilities.length;
   const lastScan = relativeTime(updatedAt);
   const priceSummary =
     pricing.length > 0
-      ? `The latest scan resolved ${pricing.length} pricing tiers spanning ${tierRange}.`
-      : "No public pricing tiers were resolved in the latest scan.";
+      ? `The latest scan resolved ${pricing.length} price bands spanning ${tierRange}.`
+      : "No public price bands were resolved in the latest scan.";
   const newsSummary =
     news.length > 0
       ? `${news.length} off-site mentions were attached to this competitor brief.`
       : "No off-site mentions were discovered in this cycle.";
   const capabilitySummary =
     capabilities.length > 0
-      ? `${capabilities.length} capabilities were mapped into the feature matrix.`
+      ? `${capabilities.length} catalogue capabilities were mapped into the feature matrix.`
       : "Capability extraction did not return structured rows for this scan.";
 
   return {
@@ -213,7 +214,7 @@ export function competitorFromData(
     description:
       fallback?.description ??
       `Competitor intelligence extracted from ${domain} by the Nexus-Intel pipeline.`,
-    category: fallback?.category ?? "Competitor Intelligence",
+    category: fallback?.category ?? "Electronics retail",
     hq: fallback?.hq ?? "Unknown",
     employees: fallback?.employees ?? "Unknown",
     founded: fallback?.founded ?? "Unknown",
@@ -235,7 +236,7 @@ export function competitorFromData(
     latestChange:
       news[0]?.title ??
       fallback?.latestChange ??
-      `${pricing.length} pricing tiers captured from the public page.`,
+      `${pricing.length} price bands captured from the public catalogue.`,
     summary: [priceSummary, newsSummary, capabilitySummary],
     pricing: pricing.length > 0 ? pricing : (fallback?.pricing ?? []),
     featureGroups: toFeatureGroups(capabilities, fallback),

@@ -1,8 +1,9 @@
 """API test suite for the Nexus-Intel FastAPI backend.
 
-Runs fully offline: MongoDB is replaced with an in-memory fake repository
-(wired in through FastAPI dependency overrides) and the orchestrator service
-is monkeypatched, so no credentials, database, or network access are needed.
+Runs fully offline: MongoDB and the account store are replaced with in-memory
+fakes (wired in through FastAPI dependency overrides) and the orchestrator
+service is monkeypatched, so no credentials, database, or network access are
+needed.
 
 Run with:
     python -m pytest tests/ -v
@@ -11,87 +12,16 @@ Run with:
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app import config, database  # noqa: E402
-from app.database import get_repository  # noqa: E402
-from app.errors import PipelineExecutionError  # noqa: E402
-from app.main import app  # noqa: E402
-from app.services import orchestrator_service  # noqa: E402
-
-CANNED_DATA = {
-    "domain": "stripe.com",
-    "pricing": [{"tier": "Starter", "monthly": "$0", "annual": "", "features": ["Dash"]}],
-    "offsiteNews": [
-        {
-            "title": "Stripe expands stablecoin payouts",
-            "source": "TechCrunch",
-            "url": "https://techcrunch.com/",
-            "sentiment": "neutral",
-        }
-    ],
-    "capabilities": [
-        {"name": "Static Page", "traditionalScraper": True, "nexusIntel": True}
-    ],
-    "executionTimeSec": 1.25,
-}
-
-
-class FakeRepository:
-    """In-memory stand-in for AnalysisRepository (async, same surface)."""
-
-    def __init__(self) -> None:
-        self.records: dict[str, dict] = {}
-        self.calls: list[tuple[str, str]] = []
-
-    async def create(self, record: dict) -> None:
-        self.calls.append(("create", record["status"]))
-        self.records[record["analysis_id"]] = dict(record)
-
-    async def update(self, analysis_id: str, changes: dict) -> None:
-        self.calls.append(("update", changes.get("status", "?")))
-        self.records[analysis_id].update(changes)
-
-    async def get_by_id(self, analysis_id: str) -> dict | None:
-        record = self.records.get(analysis_id)
-        return dict(record) if record else None
-
-    async def get_latest_by_domain(self, domain: str) -> dict | None:
-        matches = [r for r in self.records.values() if r["domain"] == domain]
-        if not matches:
-            return None
-        return dict(sorted(matches, key=lambda r: r["created_at"])[-1])
-
-
-@pytest.fixture
-def fake_repo() -> FakeRepository:
-    return FakeRepository()
-
-
-@pytest.fixture
-def client(fake_repo, monkeypatch):
-    # Keep the lifespan hermetic: never touch a real MongoDB during tests.
-    async def _noop_connect() -> None:
-        return None
-
-    async def _noop_close() -> None:
-        return None
-
-    monkeypatch.setattr(database, "connect_db", _noop_connect)
-    monkeypatch.setattr(database, "close_db", _noop_close)
-    monkeypatch.setattr(database, "_database", None)
-
-    app.dependency_overrides[get_repository] = lambda: fake_repo
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+from conftest import CANNED_DATA, seed_completed_record
+from app import config
+from app.errors import PipelineExecutionError
+from app.main import app
+from app.services import orchestrator_service
 
 
 @pytest.fixture
@@ -111,28 +41,6 @@ def pipeline_calls(monkeypatch):
 
     monkeypatch.setattr(orchestrator_service, "run_analysis", _fake_run_analysis)
     return calls
-
-
-def _seed_completed_record(repo: FakeRepository, domain: str = "stripe.com") -> str:
-    now = datetime.now(timezone.utc)
-    analysis_id = "a" * 32
-    repo.records[analysis_id] = {
-        "analysis_id": analysis_id,
-        "domain": domain,
-        "query": "stripe pricing",
-        "mock": True,
-        "status": "completed",
-        "parameters": {"pricing_tiers": True, "feature_accordions": True, "offsite_mentions": True},
-        "created_at": now,
-        "updated_at": now,
-        "completed_at": now,
-        "execution_time_sec": 1.25,
-        "report_path": "output/report.md",
-        "extractions": [],
-        "data": CANNED_DATA,
-        "error": None,
-    }
-    return analysis_id
 
 
 # --- 1. Health ------------------------------------------------------------- #
@@ -168,6 +76,7 @@ def test_analyze_accepts_valid_request(client, pipeline_calls, fake_repo):
     assert isinstance(data["offsiteNews"], list)
     assert isinstance(data["capabilities"], list)
     assert isinstance(data["executionTimeSec"], (int, float))
+    assert data["provenance"]["pricing_matrix"] == "gemini"
 
 
 # --- 3. Invalid input ------------------------------------------------------ #
@@ -213,7 +122,7 @@ def test_analyze_invokes_orchestrator_with_derived_query(client, pipeline_calls)
 # --- 5. Database record lifecycle ------------------------------------------ #
 
 
-def test_analyze_persists_record_transitions(client, pipeline_calls, fake_repo):
+def test_analyze_persists_record_transitions(client, pipeline_calls, fake_repo, auth_user):
     response = client.post("/api/v1/analyze", json={"domain": "stripe.com"})
     assert response.status_code == 200
     analysis_id = response.json()["analysis_id"]
@@ -222,6 +131,7 @@ def test_analyze_persists_record_transitions(client, pipeline_calls, fake_repo):
     assert fake_repo.calls[:3] == [("create", "queued"), ("update", "running"), ("update", "completed")]
     record = fake_repo.records[analysis_id]
     assert record["status"] == "completed"
+    assert record["user_id"] == auth_user["user_id"]
     assert record["data"]["domain"] == "stripe.com"
     assert record["completed_at"] is not None
     assert record["execution_time_sec"] == 1.25
@@ -262,7 +172,9 @@ def test_analyze_timeout_returns_504(client, monkeypatch, fake_repo):
     assert response.json()["error"]["code"] == "analysis_timeout"
 
 
-def test_analyze_unexpected_error_hides_internals(client, monkeypatch, fake_repo):
+def test_analyze_unexpected_error_hides_internals(
+    client, monkeypatch, fake_repo, fake_users
+):
     async def _boom(**kwargs):
         raise ValueError("secret=sk-internal-detail")
 
@@ -270,7 +182,11 @@ def test_analyze_unexpected_error_hides_internals(client, monkeypatch, fake_repo
 
     # raise_server_exceptions=False lets the app's 500 handler respond.
     with TestClient(app, raise_server_exceptions=False) as leak_client:
+        from app.database import get_repository, get_user_repository
+
         app.dependency_overrides[get_repository] = lambda: fake_repo
+        app.dependency_overrides[get_user_repository] = lambda: fake_users
+        leak_client.headers.update(dict(client.headers))
         response = leak_client.post("/api/v1/analyze", json={"domain": "stripe.com"})
 
     assert response.status_code == 500
@@ -281,8 +197,8 @@ def test_analyze_unexpected_error_hides_internals(client, monkeypatch, fake_repo
 # --- 7. Competitor retrieval ----------------------------------------------- #
 
 
-def test_competitor_lookup_by_domain(client, fake_repo):
-    _seed_completed_record(fake_repo)
+def test_competitor_lookup_by_domain(client, fake_repo, auth_user):
+    seed_completed_record(fake_repo, auth_user["user_id"])
     response = client.get("/api/v1/competitors/stripe.com")
     assert response.status_code == 200
     body = response.json()
@@ -292,11 +208,51 @@ def test_competitor_lookup_by_domain(client, fake_repo):
     assert body["data"]["pricing"][0]["tier"] == "Starter"
 
 
-def test_competitor_lookup_by_analysis_id(client, fake_repo):
-    analysis_id = _seed_completed_record(fake_repo)
+def test_competitor_lookup_by_analysis_id(client, fake_repo, auth_user):
+    analysis_id = seed_completed_record(fake_repo, auth_user["user_id"])
     response = client.get(f"/api/v1/competitors/{analysis_id}")
     assert response.status_code == 200
     assert response.json()["analysis_id"] == analysis_id
+
+
+def test_competitor_lookup_is_scoped_to_workspace(client, fake_repo):
+    seed_completed_record(fake_repo, "another-user", "stripe.com")
+    response = client.get("/api/v1/competitors/stripe.com")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+def test_list_competitors_returns_latest_run_per_domain(client, fake_repo, auth_user):
+    user_id = auth_user["user_id"]
+    seed_completed_record(
+        fake_repo,
+        user_id,
+        "stripe.com",
+        analysis_id="1" * 32,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    seed_completed_record(
+        fake_repo,
+        user_id,
+        "stripe.com",
+        analysis_id="2" * 32,
+        created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+    seed_completed_record(
+        fake_repo,
+        user_id,
+        "croma.com",
+        analysis_id="3" * 32,
+        created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+    )
+
+    response = client.get("/api/v1/competitors")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    entries = {entry["domain"]: entry for entry in body["competitors"]}
+    assert entries["stripe.com"]["analysis_id"] == "2" * 32
+    assert entries["croma.com"]["has_data"] is True
 
 
 # --- 8. Missing records -> 404 --------------------------------------------- #
@@ -406,3 +362,43 @@ def test_map_pricing_handles_fallback_billing_period_quirks():
     }
     assert rows[1]["annual"] == "$199/yr"
     assert rows[1]["monthly"] == ""
+
+
+def test_map_pricing_preserves_inr_display():
+    """INR prices must not be rewritten with a USD symbol."""
+    from types import SimpleNamespace
+
+    from app.services.orchestrator_service import _map_pricing
+
+    model = SimpleNamespace(
+        model_dump=lambda: {
+            "plans": [
+                {
+                    "name": "55-inch QLED",
+                    "price": 54990.0,
+                    "price_display": "₹54,990",
+                    "billing_period": "one_time",
+                    "included_features": [],
+                },
+                {
+                    "name": "Soundbar",
+                    "price": 12990.0,
+                    "price_display": "12990",
+                    "billing_period": "one_time",
+                    "included_features": [],
+                },
+            ]
+        }
+    )
+    rows = _map_pricing(model)
+    assert rows[0]["monthly"] == "₹54,990"
+    # A bare number is left untouched rather than given a fabricated symbol.
+    assert rows[1]["monthly"] == "12990"
+
+
+def test_provenance_labels_llm_and_fallback():
+    from app.services.orchestrator_service import _provenance_for
+
+    assert _provenance_for([]) == "gemini"
+    assert _provenance_for(["repaired: model output fixed"]) == "gemini"
+    assert _provenance_for(["fallback: extracted by heuristic parser, not the LLM"]) == "fallback"

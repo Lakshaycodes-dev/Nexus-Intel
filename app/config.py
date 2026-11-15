@@ -95,6 +95,18 @@ CORS_ORIGINS: list[str] = [
 ]
 CORS_ALLOW_CREDENTIALS: bool = _as_bool(os.getenv("CORS_ALLOW_CREDENTIALS", "false"))
 
+# --- Auth ------------------------------------------------------------------ #
+
+# Signing key for access tokens. An ephemeral key is generated when unset, but
+# sessions then die on restart - always set this in real deployments.
+JWT_SECRET: str = os.getenv("JWT_SECRET", "").strip()
+JWT_EXPIRES_MINUTES: int = max(
+    5, _as_int(os.getenv("JWT_EXPIRES_MINUTES", "10080"), 10080)  # 7 days
+)
+MONGODB_USERS_COLLECTION: str = os.getenv("MONGODB_USERS_COLLECTION", "users").strip()
+PASSWORD_MIN_LENGTH: int = max(8, _as_int(os.getenv("PASSWORD_MIN_LENGTH", "8"), 8))
+ALLOW_REGISTRATION: bool = _as_bool(os.getenv("ALLOW_REGISTRATION", "true"), True)
+
 # --- Pipeline -------------------------------------------------------------- #
 
 ANALYSIS_TIMEOUT_SECONDS: float = _as_float(

@@ -1,4 +1,4 @@
-"""Gemini 1.5 Flash integration: prompting, structured output, validation, fallbacks.
+"""Gemini integration: prompting, structured output, validation, fallbacks.
 
 Pipeline (``GeminiService.extract``)::
 
@@ -44,7 +44,7 @@ __all__ = [
     "DEFAULT_MODEL",
 ]
 
-DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 # Transient failures worth retrying: 429 rate limits, 5xx, network blips.
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504, 529}

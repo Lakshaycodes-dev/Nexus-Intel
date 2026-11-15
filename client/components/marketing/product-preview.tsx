@@ -63,9 +63,9 @@ export function ProductPreview() {
               <div className="mb-3 mt-2 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1.5">
                 <div className="flex items-center gap-1.5">
                   <span className="flex h-4 w-4 items-center justify-center rounded bg-slate-900 text-[7px] font-semibold text-white">
-                    A
+                    L
                   </span>
-                  <span className="text-[8px] font-medium text-slate-600">Acme Corp</span>
+                  <span className="text-[8px] font-medium text-slate-600">Lakshay Retail</span>
                 </div>
                 <span className="text-[8px] text-slate-400">⌄</span>
               </div>
@@ -117,7 +117,7 @@ export function ProductPreview() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <p className="text-[7px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Wednesday, October 21
+                      Friday, November 13
                     </p>
                     <span className="rounded bg-emerald-50 px-1 py-0.5 text-[6px] font-semibold uppercase tracking-wide text-emerald-600">
                       Live
@@ -136,7 +136,7 @@ export function ProductPreview() {
                     <Bell className="h-2.5 w-2.5" />
                   </span>
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 text-[7px] font-semibold text-white">
-                    AL
+                    L
                   </span>
                 </div>
               </div>

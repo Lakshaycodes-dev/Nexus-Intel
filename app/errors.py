@@ -38,6 +38,27 @@ class ApiException(Exception):
         self.details = details or []
 
 
+class UnauthorizedError(ApiException):
+    """The request is missing a valid access token."""
+
+    def __init__(self, message: str = "Sign in to continue.") -> None:
+        super().__init__("unauthorized", message, status.HTTP_401_UNAUTHORIZED)
+
+
+class ForbiddenError(ApiException):
+    """The authenticated user is not allowed to perform this action."""
+
+    def __init__(self, message: str = "You do not have access to this resource.") -> None:
+        super().__init__("forbidden", message, status.HTTP_403_FORBIDDEN)
+
+
+class ConflictError(ApiException):
+    """The request conflicts with existing state (e.g. duplicate email)."""
+
+    def __init__(self, message: str = "That resource already exists.") -> None:
+        super().__init__("conflict", message, status.HTTP_409_CONFLICT)
+
+
 class DatabaseUnavailableError(ApiException):
     """MongoDB could not be reached for a required operation."""
 

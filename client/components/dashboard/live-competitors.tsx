@@ -3,6 +3,7 @@
 import { Radio } from "lucide-react";
 
 import { CompetitorCard } from "@/components/dashboard/competitor-card";
+import { useAuth } from "@/lib/auth";
 import { useLiveCompetitors } from "@/lib/use-live-competitors";
 import type { Competitor } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ export function LiveCompetitors({
 }: {
   initialCompetitors: Competitor[];
 }) {
+  const { user } = useAuth();
   const { competitors, loading, liveCount } = useLiveCompetitors(initialCompetitors);
 
   return (
@@ -25,9 +27,11 @@ export function LiveCompetitors({
         />
         {loading
           ? "Syncing the watchlist with the Nexus-Intel API…"
-          : liveCount > 0
-            ? `Live API · ${liveCount} of ${competitors.length} domains have stored analysis runs`
-            : "Showing the cached watchlist · run a scan to populate live analyses"}
+          : !user
+            ? "Demo watchlist · sign in to sync your own workspace"
+            : liveCount > 0
+              ? `Live API · ${liveCount} of ${competitors.length} domains have stored analysis runs`
+              : "Showing the cached watchlist · run a scan to populate live analyses"}
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

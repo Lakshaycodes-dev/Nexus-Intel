@@ -36,7 +36,7 @@ const solutions = [
     title: "Walk into every deal with the latest move.",
     description:
       "Live battlecards, pricing comparisons, and objection-ready context for every competitive conversation.",
-    points: ["Rep-ready Slack alerts", "CRM battlecards", "Pricing objection library"],
+    points: ["Store-ready WhatsApp alerts", "Catalogue battlecards", "Festive offer library"],
     tone: "indigo",
   },
   {
@@ -231,7 +231,7 @@ export default function MarketingPage() {
                           Price movement detected
                         </p>
                         <p className="mt-0.5 text-[10px] text-slate-500">
-                          Trackline Pro · $119 → $99
+                          Croma 55&quot; QLED · ₹54,990 → ₹47,990
                         </p>
                       </div>
                     </div>

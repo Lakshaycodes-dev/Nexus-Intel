@@ -87,7 +87,7 @@ class CollectionSettings:
     search_api_url: str = ""
     search_api_key: str = field(default="", repr=False)
     search_max_results: int = 5
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
 
     # Safety
     max_html_chars: int = 600_000
@@ -123,7 +123,7 @@ class CollectionSettings:
             search_api_url=os.getenv("SEARCH_API_URL", "").strip(),
             search_api_key=os.getenv("SEARCH_API_KEY", "").strip(),
             search_max_results=max(1, _int("SEARCH_MAX_RESULTS", 5)),
-            gemini_model=_text("GEMINI_MODEL", "gemini-1.5-flash"),
+            gemini_model=_text("GEMINI_MODEL", "gemini-3.8-flash"),
             max_html_chars=max(20_000, _int("COLLECTION_MAX_HTML_CHARS", 600_000)),
             max_text_chars=max(5_000, _int("COLLECTION_MAX_TEXT_CHARS", 120_000)),
             allow_private_hosts=_bool("COLLECTION_ALLOW_PRIVATE_HOSTS", False),

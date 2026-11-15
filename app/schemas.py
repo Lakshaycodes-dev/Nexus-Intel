@@ -9,14 +9,91 @@ without UI changes.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app import config
 from app.security import TargetValidationError, normalize_domain
 
 AnalysisStatus = Literal["queued", "running", "completed", "failed"]
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+
+
+class RegisterRequest(BaseModel):
+    """POST /api/v1/auth/register payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=120)
+    email: str = Field(..., max_length=254)
+    password: str = Field(
+        ...,
+        min_length=config.PASSWORD_MIN_LENGTH,
+        max_length=128,
+        description="At least 8 characters; hashed with scrypt before storage.",
+    )
+    workspace_name: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if not _EMAIL_PATTERN.match(email):
+            raise ValueError("Enter a valid email address.")
+        return email
+
+    @field_validator("name")
+    @classmethod
+    def _clean_name(cls, value: str) -> str:
+        name = " ".join(value.split())
+        if not name:
+            raise ValueError("Your name is required.")
+        return name
+
+    @field_validator("workspace_name")
+    @classmethod
+    def _clean_workspace(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        workspace = " ".join(value.split())
+        return workspace or None
+
+
+class LoginRequest(BaseModel):
+    """POST /api/v1/auth/login payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def _normalise_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class UserPublic(BaseModel):
+    """Account details safe to return to the client (never the hash)."""
+
+    user_id: str
+    email: str
+    name: str
+    workspace_name: str
+    created_at: datetime
+
+
+class AuthResponse(BaseModel):
+    """Token + profile returned by register/login."""
+
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int
+    user: UserPublic
 
 
 class AnalysisParameters(BaseModel):
@@ -108,6 +185,9 @@ class CompetitorData(BaseModel):
     offsiteNews: list[NewsEntry] = Field(default_factory=list)
     capabilities: list[CapabilityEntry] = Field(default_factory=list)
     executionTimeSec: float = 0.0
+    # Per-target provenance ("gemini" | "fallback") so the UI can be honest
+    # about whether a row came from the LLM or the heuristic extractor.
+    provenance: dict[str, str] = Field(default_factory=dict)
 
 
 class ExtractionSummary(BaseModel):
@@ -166,6 +246,24 @@ class CompetitorResponse(BaseModel):
     updated_at: datetime
     data: Optional[CompetitorData] = None
     error: Optional[dict[str, Any]] = None
+
+
+class CompetitorListEntry(BaseModel):
+    """One tracked domain in the caller's workspace."""
+
+    domain: str
+    analysis_id: str
+    status: AnalysisStatus
+    created_at: datetime
+    updated_at: datetime
+    has_data: bool = False
+
+
+class CompetitorListResponse(BaseModel):
+    """GET /api/v1/competitors payload (latest run per domain)."""
+
+    competitors: list[CompetitorListEntry] = Field(default_factory=list)
+    total: int = 0
 
 
 class HealthResponse(BaseModel):

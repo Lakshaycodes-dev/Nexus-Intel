@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import {
   Activity,
@@ -22,6 +23,7 @@ import {
 import { findCompetitor } from "@/lib/data";
 import { getCompetitor as fetchCompetitor } from "@/lib/api";
 import { competitorFromResponse } from "@/lib/adapters";
+import { TOKEN_COOKIE } from "@/lib/token";
 import { cn, formatCurrency } from "@/lib/utils";
 import { CompetitorHeader } from "@/components/dashboard/competitor-header";
 import { PricingMatrix } from "@/components/dashboard/pricing-matrix";
@@ -59,7 +61,10 @@ export default async function CompetitorPage({ params }: CompetitorPageProps) {
   let competitor = findCompetitor(id);
 
   try {
-    const response = await fetchCompetitor(competitor?.domain ?? id);
+    // The brief is rendered on the server, so forward the session cookie that
+    // the client mirrors from localStorage after sign-in.
+    const token = (await cookies()).get(TOKEN_COOKIE)?.value;
+    const response = await fetchCompetitor(competitor?.domain ?? id, undefined, token);
     competitor = competitorFromResponse(response, competitor) ?? competitor;
   } catch {
     // The backend may be offline or have no stored run yet: fall back to the
@@ -94,7 +99,7 @@ export default async function CompetitorPage({ params }: CompetitorPageProps) {
     { label: "Team size", value: `${competitor.employees} people`, icon: Users },
     { label: "Founded", value: competitor.founded, icon: CalendarDays },
     { label: "Category", value: competitor.category, icon: Tag },
-    { label: "Pricing model", value: "Subscription + usage", icon: CreditCard },
+    { label: "Pricing model", value: "Retail + no-cost EMI", icon: CreditCard },
   ];
 
   return (
@@ -105,30 +110,30 @@ export default async function CompetitorPage({ params }: CompetitorPageProps) {
         <div className="border-b border-slate-100 p-4 sm:border-b-0">
           <div className="flex items-center justify-between">
             <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-              Starting tier
+              Entry price
             </p>
             <BadgeDollarSign className="h-3.5 w-3.5 text-slate-300" />
           </div>
           <p className="mt-2 text-[20px] font-semibold tracking-[-0.03em] text-ink">
             {formatCurrency(competitor.startingPrice)}
-            <span className="ml-1 text-[10px] font-normal text-slate-400">/ mo</span>
+            <span className="ml-1 text-[10px] font-normal text-slate-400">onwards</span>
           </p>
-          <p className="mt-0.5 text-[9px] text-slate-400">Starter · monthly billing</p>
+          <p className="mt-0.5 text-[9px] text-slate-400">Value range · MRP</p>
         </div>
 
         <div className="border-b border-slate-100 p-4 sm:border-b-0">
           <div className="flex items-center justify-between">
             <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-              Pro tier
+              Premium price
             </p>
             <Layers3 className="h-3.5 w-3.5 text-slate-300" />
           </div>
           <p className="mt-2 text-[20px] font-semibold tracking-[-0.03em] text-ink">
             {formatCurrency(competitor.proPrice)}
-            <span className="ml-1 text-[10px] font-normal text-slate-400">/ mo</span>
+            <span className="ml-1 text-[10px] font-normal text-slate-400">onwards</span>
           </p>
           <p className="mt-0.5 text-[9px] text-slate-400">
-            {competitor.priceChanges > 0 ? "Changed this cycle" : "No change this cycle"}
+            {competitor.priceChanges > 0 ? "Price move this cycle" : "No price move this cycle"}
           </p>
         </div>
 
@@ -326,7 +331,7 @@ export default async function CompetitorPage({ params }: CompetitorPageProps) {
                 Recommended next move
               </span>
               <h2 className="mt-3 text-[15px] font-semibold tracking-tight text-white">
-                Protect the mid-market narrative.
+                Defend the premium shelf.
               </h2>
               <p className="mt-2 text-[10.5px] leading-relaxed text-slate-400">
                 {competitor.summary[competitor.summary.length - 1]}

@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pymongo.errors import PyMongoError
 
 from app import config
+from app.auth import get_current_user
 from app.database import AnalysisRepository, get_repository, record_to_public, utcnow
 from app.errors import AnalysisTimeoutError, DatabaseUnavailableError
 from app.schemas import (
@@ -44,10 +45,12 @@ def _new_record(
     query: str,
     mock: bool,
     parameters: AnalysisParameters,
+    user_id: str,
 ) -> dict:
     now = utcnow()
     return {
         "analysis_id": analysis_id,
+        "user_id": user_id,
         "domain": domain,
         "query": query,
         "mock": mock,
@@ -98,19 +101,30 @@ async def _mark_failed(
 async def create_analysis(
     payload: AnalyzeRequest,
     repository: AnalysisRepository = Depends(get_repository),
+    user: dict = Depends(get_current_user),
 ) -> AnalyzeResponse:
     """Run the orchestrator pipeline for one competitor and persist the result.
 
     The synchronous response keeps the existing frontend working unchanged; the
     record is also stored so ``GET /api/v1/analyze/{id}`` and
-    ``GET /api/v1/competitors/{id}`` can retrieve it later.
+    ``GET /api/v1/competitors/{id}`` can retrieve it later. Every run is scoped
+    to the authenticated user's workspace.
     """
     query = payload.query or derive_query_from_domain(payload.domain)
     mock = config.MOCK_MODE if payload.mock is None else payload.mock
     analysis_id = uuid.uuid4().hex
 
     try:
-        await repository.create(_new_record(analysis_id, payload.domain, query, mock, payload.parameters))
+        await repository.create(
+            _new_record(
+                analysis_id,
+                payload.domain,
+                query,
+                mock,
+                payload.parameters,
+                user["user_id"],
+            )
+        )
         await repository.update(analysis_id, {"status": "running"})
     except PyMongoError as exc:
         logger.error("Could not create analysis record: %s", type(exc).__name__)
@@ -190,10 +204,11 @@ _ANALYSIS_ID_PATH = Path(
 async def get_analysis(
     analysis_id: str = _ANALYSIS_ID_PATH,
     repository: AnalysisRepository = Depends(get_repository),
+    user: dict = Depends(get_current_user),
 ) -> AnalysisRecord:
     """Return the stored record (status, timestamps, results, error)."""
     try:
-        record = await repository.get_by_id(analysis_id)
+        record = await repository.get_by_id(analysis_id, user_id=user["user_id"])
     except PyMongoError as exc:
         raise DatabaseUnavailableError() from exc
 

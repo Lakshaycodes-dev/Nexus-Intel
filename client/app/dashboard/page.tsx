@@ -11,6 +11,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { competitors } from "@/lib/data";
+import { Greeting } from "@/components/dashboard/greeting";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { LiveCompetitors } from "@/components/dashboard/live-competitors";
 import { RecentScans } from "@/components/dashboard/recent-scans";
@@ -34,19 +35,17 @@ export default function DashboardPage() {
               <span className="h-1 w-1 animate-pulse-soft rounded-full bg-emerald-500" />
               Live overview
             </span>
-            <span className="text-[10px] text-slate-400">Wednesday, October 21</span>
+            <span className="text-[10px] text-slate-400">Friday, November 13</span>
             <span className="hidden h-3 w-px bg-slate-200 sm:inline" />
             <span className="hidden items-center gap-1 text-[10px] text-slate-400 sm:flex">
               <RefreshCw className="h-2.5 w-2.5" />
               Synced 8 min ago
             </span>
           </div>
-          <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.035em] text-ink sm:text-[32px]">
-            Good morning, Alex.
-          </h1>
+          <Greeting />
           <p className="mt-1.5 max-w-xl text-[12.5px] leading-relaxed text-slate-500">
             Your market moved 14 times since your last visit. Three changes deserve your
-            attention before your next call.
+            attention before your next category review.
           </p>
         </div>
 
@@ -71,7 +70,7 @@ export default function DashboardPage() {
           value="8"
           trend="+2"
           trendDirection="up"
-          detail="Across 6 market categories"
+          detail="Across 8 market categories"
           icon={Compass}
           tone="indigo"
           values={[3, 4, 4, 5, 6, 6, 7, 8, 8]}
@@ -82,7 +81,7 @@ export default function DashboardPage() {
           value="3"
           trend="+3 this week"
           trendDirection="up"
-          detail="Trackline changed twice"
+          detail="Reliance Digital changed prices twice"
           icon={TrendingUp}
           tone="amber"
           values={[1, 1, 2, 1, 2, 3, 2, 3, 3]}
@@ -93,7 +92,7 @@ export default function DashboardPage() {
           value="5"
           trend="4 in 48h"
           trendDirection="up"
-          detail="Compass HQ leads this week"
+          detail="Vijay Sales leads this week"
           icon={Sparkles}
           tone="cyan"
           values={[2, 1, 2, 2, 3, 2, 4, 4, 5]}

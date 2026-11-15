@@ -22,7 +22,7 @@ from pymongo.errors import PyMongoError
 
 from app import config, database
 from app.errors import register_exception_handlers
-from app.routers import analyze, competitors
+from app.routers import analyze, auth, competitors
 from app.schemas import HealthResponse
 
 logging.basicConfig(
@@ -68,6 +68,7 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
+app.include_router(auth.router, prefix="/api/v1")
 app.include_router(analyze.router, prefix="/api/v1")
 app.include_router(competitors.router, prefix="/api/v1")
 

@@ -106,6 +106,7 @@ function ScanPanel({
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
   const terminalRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -168,6 +169,7 @@ function ScanPanel({
               ? cause.message
               : "The scan failed unexpectedly. Please retry.",
           );
+          setErrorStatus(cause instanceof ApiError ? cause.status : null);
         });
     }, 250);
 
@@ -182,7 +184,7 @@ function ScanPanel({
   const dynamicLines = useMemo<TerminalLine[]>(() => {
     if (!result) return [];
     const data = result.data;
-    return [
+    const lines: TerminalLine[] = [
       {
         at: TOTAL_DURATION,
         time: `+${result.execution_time_sec.toFixed(1)}s`,
@@ -196,6 +198,24 @@ function ScanPanel({
         message: `${data.offsiteNews.length} off-site mentions · ${data.capabilities.length} capabilities mapped`,
       },
     ];
+
+    const provenance = Object.entries(data.provenance ?? {});
+    if (provenance.length > 0) {
+      const fallbacks = provenance
+        .filter(([, value]) => value === "fallback")
+        .map(([target]) => target.replace(/_/g, " "));
+      lines.push({
+        at: TOTAL_DURATION,
+        time: `+${result.execution_time_sec.toFixed(1)}s`,
+        level: fallbacks.length > 0 ? "info" : "success",
+        message:
+          fallbacks.length > 0
+            ? `heuristic fallback used for ${fallbacks.join(", ")}`
+            : "all fields extracted by Gemini · provenance verified",
+      });
+    }
+
+    return lines;
   }, [result]);
 
   const visibleLines = useMemo(
@@ -470,13 +490,23 @@ function ScanPanel({
         <div className="border-t border-slate-200/80 bg-white px-5 py-4 sm:px-7">
           <div className="flex items-center justify-between gap-3">
             {error ? (
-              <p role="alert" className="text-[10px] leading-relaxed text-rose-600">
-                {error}
-              </p>
+              <div className="min-w-0">
+                <p role="alert" className="text-[10px] leading-relaxed text-rose-600">
+                  {error}
+                </p>
+                {errorStatus === 401 ? (
+                  <Link
+                    href={`/login?next=${encodeURIComponent("/dashboard")}`}
+                    className="mt-1 inline-flex text-[10px] font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Sign in again →
+                  </Link>
+                ) : null}
+              </div>
             ) : (
               <p className="hidden text-[11px] text-slate-400 sm:block">
                 {complete
-                  ? "Result persisted to MongoDB · GET /api/v1/analyze/{id}"
+                  ? "Saved to your workspace · GET /api/v1/analyze/{id}"
                   : "Workspace scan · encrypted at rest"}
               </p>
             )}
@@ -491,19 +521,29 @@ function ScanPanel({
               </Link>
             ) : error ? (
               <div className="ml-auto flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setElapsed(0);
-                    setResult(null);
-                    setError(null);
-                    setAttempt((value) => value + 1);
-                  }}
-                  className={buttonVariants({ size: "md" })}
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Retry scan
-                </button>
+                {errorStatus === 401 ? (
+                  <Link
+                    href={`/login?next=${encodeURIComponent("/dashboard")}`}
+                    className={buttonVariants({ size: "md" })}
+                  >
+                    Sign in again
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setElapsed(0);
+                      setResult(null);
+                      setError(null);
+                      setErrorStatus(null);
+                      setAttempt((value) => value + 1);
+                    }}
+                    className={buttonVariants({ size: "md" })}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Retry scan
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onClose}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, ExternalLink, ShieldCheck } from "lucide-react";
 import type { Competitor } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 type Billing = "monthly" | "annual";
 
@@ -18,11 +18,11 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
           <div className="flex items-center gap-2">
             <h2 className="text-[15px] font-semibold tracking-tight text-ink">Pricing matrix</h2>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.1em] text-slate-400">
-              USD
+              INR
             </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
-            Every public tier, normalized across billing cycles.
+            Every price band, normalized across online and in-store offers.
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
                   : "text-slate-500 hover:text-slate-700",
               )}
             >
-              Monthly
+              MRP
             </button>
             <button
               type="button"
@@ -56,9 +56,9 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
                   : "text-slate-500 hover:text-slate-700",
               )}
             >
-              Annual
+              Festive
               <span className="rounded-full bg-emerald-50 px-1 py-0.5 text-[7px] font-semibold text-emerald-600">
-                −20%
+                −10%
               </span>
             </button>
           </div>
@@ -68,7 +68,7 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
       <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-3">
         {competitor.pricing.map((tier) => {
           const price = billing === "annual" ? tier.annualMonthly : tier.monthly;
-          const savings = (tier.monthly - tier.annualMonthly) * 12;
+          const savings = tier.monthly - tier.annualMonthly;
 
           return (
             <div
@@ -92,7 +92,7 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
               </p>
 
               <div className="mt-3 flex items-end gap-1">
-                <span className="text-[13px] font-medium text-slate-400">$</span>
+                <span className="text-[13px] font-medium text-slate-400">₹</span>
                 <motion.span
                   key={`${tier.name}-${billing}`}
                   initial={{ opacity: 0, y: 4 }}
@@ -102,16 +102,18 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
                 >
                   {price}
                 </motion.span>
-                <span className="pb-0.5 text-[10px] text-slate-400">/ mo</span>
+                <span className="pb-0.5 text-[10px] text-slate-400">onwards</span>
               </div>
               <p className="mt-1.5 text-[9px] text-slate-400">
                 {billing === "annual" ? (
                   <>
-                    ${price * 12} billed annually ·{" "}
-                    <span className="font-medium text-emerald-600">save ${savings}/yr</span>
+                    MRP {formatCurrency(tier.monthly)} ·{" "}
+                    <span className="font-medium text-emerald-600">
+                      save {formatCurrency(savings)}
+                    </span>
                   </>
                 ) : (
-                  "Billed monthly · cancel anytime"
+                  "MRP inclusive of GST"
                 )}
               </p>
 
@@ -132,15 +134,15 @@ export function PricingMatrix({ competitor }: { competitor: Competitor }) {
 
       <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <span className="text-[9px] text-slate-400">
-          Captured from public pricing · {competitor.domain}/pricing
+          Captured from the public catalogue · {competitor.domain}
         </span>
         <a
-          href={`https://${competitor.domain}/pricing`}
+          href={`https://${competitor.domain}`}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-500 transition hover:text-indigo-600"
         >
-          View source
+          View catalogue
           <ExternalLink className="h-2.5 w-2.5" />
         </a>
       </div>

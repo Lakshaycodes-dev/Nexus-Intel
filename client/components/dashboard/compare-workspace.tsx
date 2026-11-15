@@ -58,8 +58,8 @@ const rows: CompareRow[] = [
   {
     id: "starting",
     group: "Commercial",
-    label: "Starting price",
-    helper: "Lowest paid plan",
+    label: "Entry price",
+    helper: "Lowest shelf price",
     mine: { display: formatCurrency(myProduct.startingPrice), raw: myProduct.startingPrice },
     get: (c) => ({ display: formatCurrency(c.startingPrice), raw: c.startingPrice }),
     direction: "lower",
@@ -67,8 +67,8 @@ const rows: CompareRow[] = [
   {
     id: "pro",
     group: "Commercial",
-    label: "Pro tier",
-    helper: "Monthly billing",
+    label: "Premium price",
+    helper: "Flagship shelf price",
     mine: { display: formatCurrency(myProduct.proPrice), raw: myProduct.proPrice },
     get: (c) => ({ display: formatCurrency(c.proPrice), raw: c.proPrice }),
     direction: "lower",
@@ -76,8 +76,8 @@ const rows: CompareRow[] = [
   {
     id: "trial",
     group: "Commercial",
-    label: "Free trial",
-    helper: "Self-serve access",
+    label: "Exchange window",
+    helper: "Return or exchange period",
     mine: {
       display: `${myProduct.comparison.freeTrialDays} days`,
       raw: myProduct.comparison.freeTrialDays,
@@ -90,9 +90,9 @@ const rows: CompareRow[] = [
   },
   {
     id: "refresh",
-    group: "Monitoring",
-    label: "Refresh cadence",
-    helper: "Fastest paid cadence",
+    group: "Catalogue",
+    label: "Price refresh",
+    helper: "Fastest price update cadence",
     mine: {
       display: refreshLabel(myProduct.comparison.refreshMinutes),
       raw: myProduct.comparison.refreshMinutes,
@@ -105,18 +105,18 @@ const rows: CompareRow[] = [
   },
   {
     id: "coverage",
-    group: "Monitoring",
-    label: "Off-site coverage",
-    helper: "Where signals are found",
+    group: "Catalogue",
+    label: "Catalogue coverage",
+    helper: "Online and store footprint",
     mine: { display: myProduct.comparison.coverage },
     get: (c) => ({ display: c.comparison.coverage }),
     direction: "none",
   },
   {
     id: "storage",
-    group: "Monitoring",
-    label: "Snapshot storage",
-    helper: "Intelligence retention",
+    group: "Catalogue",
+    label: "Price history",
+    helper: "How far back prices go",
     mine: {
       display: `${myProduct.comparison.retentionMonths} months`,
       raw: myProduct.comparison.retentionMonths,
@@ -129,66 +129,66 @@ const rows: CompareRow[] = [
   },
   {
     id: "sso",
-    group: "Security",
-    label: "SAML single sign-on",
-    helper: "Enterprise identity",
+    group: "Compliance",
+    label: "GST invoicing",
+    helper: "Business-ready billing",
     mine: { display: "Included", raw: myProduct.comparison.sso },
     get: (c) => ({ display: c.comparison.sso ? "Included" : "Not included", raw: c.comparison.sso }),
     direction: "boolean",
   },
   {
     id: "soc2",
-    group: "Security",
-    label: "SOC 2 Type II",
-    helper: "Independent audit",
-    mine: { display: "Certified", raw: myProduct.comparison.soc2 },
-    get: (c) => ({ display: c.comparison.soc2 ? "Certified" : "Not certified", raw: c.comparison.soc2 }),
+    group: "Compliance",
+    label: "Brand authorisation",
+    helper: "Authorised partner status",
+    mine: { display: "Authorised", raw: myProduct.comparison.soc2 },
+    get: (c) => ({ display: c.comparison.soc2 ? "Authorised" : "Not authorised", raw: c.comparison.soc2 }),
     direction: "boolean",
   },
   {
     id: "audit",
-    group: "Security",
-    label: "Audit logs",
-    helper: "Change-level history",
-    mine: { display: "Included", raw: myProduct.comparison.auditLogs },
+    group: "Compliance",
+    label: "Offer audit trail",
+    helper: "Published price movement history",
+    mine: { display: "Published", raw: myProduct.comparison.auditLogs },
     get: (c) => ({
-      display: c.comparison.auditLogs ? "Included" : "Enterprise only",
+      display: c.comparison.auditLogs ? "Published" : "Not published",
       raw: c.comparison.auditLogs,
     }),
     direction: "boolean",
   },
   {
     id: "slack",
-    group: "Integrations",
-    label: "Slack & Teams",
-    helper: "Team alert routing",
+    group: "Connections",
+    label: "WhatsApp alerts",
+    helper: "Customer offer notifications",
     mine: { display: "Included", raw: myProduct.comparison.slack },
-    get: (c) => ({ display: c.comparison.slack ? "Included" : "Email only", raw: c.comparison.slack }),
+    get: (c) => ({ display: c.comparison.slack ? "Included" : "SMS only", raw: c.comparison.slack }),
     direction: "boolean",
   },
   {
     id: "crm",
-    group: "Integrations",
-    label: "CRM sync",
-    helper: "Native connections",
+    group: "Connections",
+    label: "POS integration",
+    helper: "Billing or ERP link",
     mine: { display: myProduct.comparison.crm },
     get: (c) => ({ display: c.comparison.crm }),
     direction: "none",
   },
   {
     id: "api",
-    group: "Integrations",
-    label: "REST API",
-    helper: "Programmatic access",
-    mine: { display: "Included", raw: myProduct.comparison.api },
-    get: (c) => ({ display: c.comparison.api ? "Included" : "Not available", raw: c.comparison.api }),
+    group: "Connections",
+    label: "Dealer API",
+    helper: "Catalogue and stock access",
+    mine: { display: "Available", raw: myProduct.comparison.api },
+    get: (c) => ({ display: c.comparison.api ? "Available" : "Not available", raw: c.comparison.api }),
     direction: "boolean",
   },
   {
     id: "webhooks",
-    group: "Integrations",
-    label: "Webhooks",
-    helper: "Real-time delivery",
+    group: "Connections",
+    label: "Stock alerts",
+    helper: "Live availability signals",
     mine: { display: "Included", raw: myProduct.comparison.webhooks },
     get: (c) => ({
       display: c.comparison.webhooks ? "Included" : "Not available",
@@ -198,9 +198,9 @@ const rows: CompareRow[] = [
   },
   {
     id: "sla",
-    group: "Support",
-    label: "P1 response SLA",
-    helper: "Critical issues",
+    group: "Service",
+    label: "Service response SLA",
+    helper: "Critical escalations",
     mine: { display: myProduct.comparison.p1Response, raw: 4 },
     get: (c) => ({
       display: c.comparison.p1Response,
@@ -210,18 +210,18 @@ const rows: CompareRow[] = [
   },
   {
     id: "csm",
-    group: "Support",
-    label: "Dedicated CSM",
-    helper: "Named success lead",
+    group: "Service",
+    label: "Dedicated account manager",
+    helper: "Bulk and corporate orders",
     mine: { display: "Included", raw: myProduct.comparison.dedicatedCsm },
     get: (c) => ({ display: c.comparison.dedicatedCsm ? "Included" : "Not included", raw: c.comparison.dedicatedCsm }),
     direction: "boolean",
   },
   {
     id: "onboarding",
-    group: "Support",
+    group: "Service",
     label: "Onboarding",
-    helper: "Time-to-value",
+    helper: "Store setup support",
     mine: { display: myProduct.comparison.onboarding },
     get: (c) => ({ display: c.comparison.onboarding }),
     direction: "none",
@@ -302,7 +302,7 @@ function ValueCell({
   );
 }
 
-const initialSelection = ["trackline", "compass-hq", "signalcraft"];
+const initialSelection = ["croma", "reliance-digital", "vijay-sales"];
 
 export function CompareWorkspace() {
   const { competitors, loading, liveCount } = useLiveCompetitors(staticCompetitors);
@@ -354,7 +354,7 @@ export function CompareWorkspace() {
 
   const chartData = useMemo(
     () => [
-      { name: "Nexus Intel", starting: myProduct.startingPrice, pro: myProduct.proPrice },
+      { name: myProduct.name, starting: myProduct.startingPrice, pro: myProduct.proPrice },
       ...selected.map((competitor) => ({
         name: competitor.name,
         starting: competitor.startingPrice,
@@ -366,7 +366,7 @@ export function CompareWorkspace() {
 
   const allProducts = useMemo(
     () => [
-      { name: "Nexus Intel", starting: myProduct.startingPrice, pro: myProduct.proPrice },
+      { name: myProduct.name, starting: myProduct.startingPrice, pro: myProduct.proPrice },
       ...selected.map((competitor) => ({
         name: competitor.name,
         starting: competitor.startingPrice,
@@ -554,7 +554,7 @@ export function CompareWorkspace() {
               height={270}
               className="h-4 w-4 rounded-full object-contain"
             />
-            Nexus Intel
+            {myProduct.name}
             <span className="rounded bg-white px-1 py-0.5 text-[7px] font-medium text-indigo-500">
               You
             </span>
@@ -603,17 +603,17 @@ export function CompareWorkspace() {
               Feature & commercial matrix
             </h2>
             <p className="mt-1 text-[10.5px] text-slate-500">
-              {rows.length} dimensions across pricing, security, integrations, and support.
+              {rows.length} dimensions across pricing, catalogue, compliance, and service.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1.5 text-[8px] text-slate-400">
               <span className="h-2 w-2 rounded-sm bg-emerald-100 ring-1 ring-emerald-200" />
-              Nexus advantage
+              Our advantage
             </span>
             <span className="flex items-center gap-1.5 text-[8px] text-slate-400">
               <span className="h-2 w-2 rounded-sm bg-amber-100 ring-1 ring-amber-200" />
-              Competitor advantage
+              Competitor edge
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-[8px] font-semibold text-emerald-700">
               <Trophy className="h-2.5 w-2.5" />
@@ -639,8 +639,8 @@ export function CompareWorkspace() {
                       className="h-6 w-6 rounded-md object-contain"
                     />
                     <div>
-                      <p className="text-[9px] font-semibold text-indigo-800">Nexus Intel</p>
-                      <p className="text-[7px] text-indigo-400">Your product</p>
+                      <p className="text-[9px] font-semibold text-indigo-800">{myProduct.name}</p>
+                      <p className="text-[7px] text-indigo-400">Your store</p>
                     </div>
                   </div>
                 </th>
@@ -755,17 +755,17 @@ export function CompareWorkspace() {
                 Price positioning
               </h2>
               <p className="mt-1 text-[10.5px] text-slate-500">
-                Starting and Pro tiers across the selected set.
+                Entry and premium price bands across the selected set.
               </p>
             </div>
             <div className="flex items-center gap-4 text-[9px] text-slate-400">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm bg-indigo-200" />
-                Starting
+                Entry
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm bg-indigo-600" />
-                Pro
+                Premium
               </span>
             </div>
           </div>
@@ -794,7 +794,7 @@ export function CompareWorkspace() {
                   tickLine={false}
                   axisLine={false}
                   tick={{ fontSize: 9, fill: "#94A3B8" }}
-                  tickFormatter={(value) => `$${value}`}
+                  tickFormatter={(value) => formatCurrency(Number(value))}
                   width={48}
                 />
                 <Tooltip
@@ -808,7 +808,7 @@ export function CompareWorkspace() {
                   }}
                   formatter={(value, name) => [
                     formatCurrency(Number(value)),
-                    name === "starting" ? "Starting tier" : "Pro tier",
+                    name === "starting" ? "Entry price" : "Premium price",
                   ]}
                   labelStyle={{ fontSize: 10, fontWeight: 600, color: "#0F172A" }}
                 />
@@ -837,14 +837,14 @@ export function CompareWorkspace() {
               Market read
             </span>
             <h2 className="mt-3 text-[16px] font-semibold tracking-tight text-white">
-              Price is not the whole story.
+              Shelf price is not the whole story.
             </h2>
             <p className="mt-2 text-[10.5px] leading-relaxed text-slate-400">
-              {lowestEntry.name === "Nexus Intel"
-                ? "Nexus holds the lowest entry point in this comparison. Protect the gap with governance and coverage."
-                : `${lowestEntry.name} enters at ${formatCurrency(lowestEntry.starting)}, below the selected set. Differentiate on depth, not discounts.`}{" "}
-              The top Pro tier reaches {formatCurrency(highestPro.pro)}, a{" "}
-              {formatCurrency(proSpread)} spread from the lowest starting plan.
+              {lowestEntry.name === myProduct.name
+                ? `${myProduct.name} holds the lowest entry point in this comparison. Protect the gap with service and stock cover.`
+                : `${lowestEntry.name} enters at ${formatCurrency(lowestEntry.starting)}, below the selected set. Differentiate on service, not discounts.`}{" "}
+              The top premium price reaches {formatCurrency(highestPro.pro)}, a{" "}
+              {formatCurrency(proSpread)} spread from the lowest entry price.
             </p>
 
             <div className="mt-5 space-y-3 border-t border-white/[0.08] pt-4">
@@ -853,9 +853,9 @@ export function CompareWorkspace() {
                   <Clock3 className="h-3 w-3" />
                 </span>
                 <div>
-                  <p className="text-[10px] font-medium text-slate-200">Refresh advantage</p>
+                  <p className="text-[10px] font-medium text-slate-200">Price-refresh advantage</p>
                   <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
-                    15-minute cadence is faster than every selected competitor.
+                    15-minute price updates are faster than every selected competitor.
                   </p>
                 </div>
               </div>
@@ -864,9 +864,9 @@ export function CompareWorkspace() {
                   <ShieldCheck className="h-3 w-3" />
                 </span>
                 <div>
-                  <p className="text-[10px] font-medium text-slate-200">Governance is included</p>
+                  <p className="text-[10px] font-medium text-slate-200">Compliance is included</p>
                   <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
-                    SSO, SOC 2, and audit logs ship without an enterprise upgrade.
+                    GST invoicing, brand authorisation, and price history ship as standard.
                   </p>
                 </div>
               </div>
@@ -877,7 +877,7 @@ export function CompareWorkspace() {
                 <div>
                   <p className="text-[10px] font-medium text-slate-200">Where to lead</p>
                   <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
-                    Anchor on auditability and unlimited signal coverage in mid-market deals.
+                    Anchor on price transparency and festive-season stock cover.
                   </p>
                 </div>
               </div>

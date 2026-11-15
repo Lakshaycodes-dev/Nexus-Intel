@@ -1,16 +1,20 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   Check,
   Globe2,
+  LogIn,
   Radar,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import type { ScopeKey } from "@/lib/types";
 import { DEFAULT_SCOPES, SCAN_SCOPES } from "@/lib/scopes";
+import { useAuth } from "@/lib/auth";
+import { readStoredToken } from "@/lib/token";
 import { cn } from "@/lib/utils";
 import { LiveExecutionModal } from "@/components/live-execution-modal";
 
@@ -34,9 +38,11 @@ function normalizeTarget(input: string) {
 }
 
 export function Scanner({ variant = "hero", className }: ScannerProps) {
+  const { user } = useAuth();
   const [url, setUrl] = useState("");
   const [scopes, setScopes] = useState<Record<ScopeKey, boolean>>(DEFAULT_SCOPES);
   const [error, setError] = useState("");
+  const [authRequired, setAuthRequired] = useState(false);
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("");
   const [activeScopes, setActiveScopes] = useState<ScopeKey[]>([
@@ -50,6 +56,7 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
   function toggleScope(scope: ScopeKey) {
     setScopes((current) => ({ ...current, [scope]: !current[scope] }));
     setError("");
+    setAuthRequired(false);
   }
 
   function launch(rawTarget: string) {
@@ -57,7 +64,7 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
     const selected = (Object.keys(scopes) as ScopeKey[]).filter((key) => scopes[key]);
 
     if (!normalized) {
-      setError("Enter a valid public domain, for example acme.com.");
+      setError("Enter a valid public domain, for example croma.com.");
       return;
     }
     if (selected.length === 0) {
@@ -65,6 +72,15 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
       return;
     }
 
+    // Scans are persisted to the signed-in user's workspace. The demo stays
+    // browsable, but running a live scan asks the visitor to sign in first.
+    if (!user && !readStoredToken()) {
+      setError("");
+      setAuthRequired(true);
+      return;
+    }
+
+    setAuthRequired(false);
     setError("");
     setUrl(normalized);
     setTarget(normalized);
@@ -102,8 +118,8 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
               <button
                 type="button"
                 onClick={() => {
-                  setUrl("trackline.io");
-                  launch("trackline.io");
+                  setUrl("croma.com");
+                  launch("croma.com");
                 }}
                 className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 transition hover:text-indigo-800"
               >
@@ -121,9 +137,10 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
                     onChange={(event) => {
                       setUrl(event.target.value);
                       setError("");
+                      setAuthRequired(false);
                     }}
                     aria-label="Competitor URL"
-                    placeholder="Enter competitor URL, e.g., acme.com"
+                    placeholder="Enter competitor URL, e.g., croma.com"
                     spellCheck={false}
                     autoComplete="off"
                     className="h-11 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0"
@@ -179,7 +196,9 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
                 </div>
                 <span className="flex items-center gap-1.5 text-[10px] text-slate-400">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                  Read-only · no login required
+                  {user
+                    ? "Private workspace · scans saved to your account"
+                    : "Demo mode · sign in to run a live scan"}
                 </span>
               </div>
             </form>
@@ -214,9 +233,10 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
                   onChange={(event) => {
                     setUrl(event.target.value);
                     setError("");
+                    setAuthRequired(false);
                   }}
                   aria-label="Competitor URL"
-                  placeholder="competitor.com"
+                  placeholder="croma.com"
                   spellCheck={false}
                   autoComplete="off"
                   className="h-11 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0"
@@ -265,6 +285,25 @@ export function Scanner({ variant = "hero", className }: ScannerProps) {
             </div>
           </form>
         )}
+
+        {authRequired ? (
+          <div
+            role="status"
+            className="mt-3 flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p className="flex items-start gap-2 text-[11px] leading-relaxed text-indigo-800">
+              <LogIn className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Sign in to run a live scan. The demo dashboard stays free to explore.
+            </p>
+            <Link
+              href={`/login?next=${encodeURIComponent("/dashboard")}`}
+              className="inline-flex shrink-0 items-center gap-1 self-start rounded-full bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-indigo-700 sm:self-auto"
+            >
+              Sign in
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : null}
 
         {error ? (
           <p role="alert" className="px-2 pb-1 pt-2 text-[11px] font-medium text-rose-600">

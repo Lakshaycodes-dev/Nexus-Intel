@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { buttonVariants } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -15,6 +16,7 @@ const navLinks = [
 ];
 
 export function SiteHeader() {
+  const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -65,16 +67,25 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-2 sm:flex">
-          <Link
-            href="/dashboard"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-slate-600")}
-          >
-            Sign In
-          </Link>
-          <Link href="/dashboard" className={buttonVariants({ size: "sm" })}>
-            Launch Console
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          {user ? (
+            <Link href="/dashboard" className={buttonVariants({ size: "sm" })}>
+              Open console
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-slate-600")}
+              >
+                Sign In
+              </Link>
+              <Link href="/dashboard" className={buttonVariants({ size: "sm" })}>
+                Launch Console
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -126,21 +137,34 @@ export function SiteHeader() {
                 ))}
               </nav>
               <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4">
-                <Link
-                  href="/dashboard"
-                  onClick={() => setMenuOpen(false)}
-                  className={buttonVariants({ variant: "secondary", size: "md" })}
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/dashboard"
-                  onClick={() => setMenuOpen(false)}
-                  className={buttonVariants({ size: "md" })}
-                >
-                  Launch Console
-                  <ArrowUpRight className="h-4 w-4" />
-                </Link>
+                {user ? (
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setMenuOpen(false)}
+                    className={buttonVariants({ size: "md" })}
+                  >
+                    Open console
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      onClick={() => setMenuOpen(false)}
+                      className={buttonVariants({ variant: "secondary", size: "md" })}
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setMenuOpen(false)}
+                      className={buttonVariants({ size: "md" })}
+                    >
+                      Launch Console
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>

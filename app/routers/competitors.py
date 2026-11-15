@@ -1,26 +1,28 @@
-"""``GET /api/v1/competitors/{id}``.
+"""Competitor intelligence retrieval endpoints.
 
-Assumption (documented per the backend spec): the repository has no separate
-"competitor" collection - a competitor is identified by its normalised domain,
-and each analysis run is one competitor-intelligence record. The ``{id}``
-path parameter therefore accepts *either*:
+There is no separate "competitor" collection - a competitor is identified by
+its normalised domain, and each analysis run is one intelligence record scoped
+to the authenticated user's workspace.
 
-* a domain (``stripe.com`` or a full URL) -> most recent analysis for it, or
-* a 32-char analysis ID -> that exact analysis.
-
-Returns 404 with the standard error envelope when nothing matches.
+* ``GET /api/v1/competitors``        -> latest run per tracked domain
+* ``GET /api/v1/competitors/{id}``   -> one run, by domain or analysis ID
 """
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pymongo.errors import PyMongoError
 
+from app.auth import get_current_user
 from app.database import AnalysisRepository, get_repository, record_to_public
 from app.errors import DatabaseUnavailableError
-from app.schemas import CompetitorResponse
+from app.schemas import (
+    CompetitorListEntry,
+    CompetitorListResponse,
+    CompetitorResponse,
+)
 from app.security import TargetValidationError, normalize_domain
 
 logger = logging.getLogger("nexus_intel.api")
@@ -37,6 +39,38 @@ def _is_analysis_id(value: str) -> bool:
     )
 
 
+def _list_entry(record: dict) -> CompetitorListEntry:
+    public = record_to_public(record)
+    return CompetitorListEntry(
+        domain=public["domain"],
+        analysis_id=public["analysis_id"],
+        status=public["status"],
+        created_at=public["created_at"],
+        updated_at=public["updated_at"],
+        has_data=bool(public.get("data")),
+    )
+
+
+@router.get(
+    "/competitors",
+    response_model=CompetitorListResponse,
+    summary="List tracked competitors",
+)
+async def list_competitors(
+    limit: int = Query(default=50, ge=1, le=200),
+    repository: AnalysisRepository = Depends(get_repository),
+    user: dict = Depends(get_current_user),
+) -> CompetitorListResponse:
+    """Return the most recent run for each domain in the caller's workspace."""
+    try:
+        records = await repository.list_latest_by_user(user["user_id"], limit=limit)
+    except PyMongoError as exc:
+        raise DatabaseUnavailableError() from exc
+
+    entries = [_list_entry(record) for record in records]
+    return CompetitorListResponse(competitors=entries, total=len(entries))
+
+
 @router.get(
     "/competitors/{competitor_id}",
     response_model=CompetitorResponse,
@@ -50,13 +84,20 @@ async def get_competitor(
         description="A competitor domain (e.g. 'stripe.com') or an analysis ID.",
     ),
     repository: AnalysisRepository = Depends(get_repository),
+    user: dict = Depends(get_current_user),
 ) -> CompetitorResponse:
-    """Look up the latest analysis for a competitor domain or analysis ID."""
+    """Look up the latest analysis for a competitor domain or analysis ID.
+
+    Both lookups are filtered by ``user_id`` so one workspace can never read
+    another workspace's records.
+    """
     record = None
 
     if _is_analysis_id(competitor_id):
         try:
-            record = await repository.get_by_id(competitor_id)
+            record = await repository.get_by_id(
+                competitor_id, user_id=user["user_id"]
+            )
         except PyMongoError as exc:
             raise DatabaseUnavailableError() from exc
 
@@ -68,7 +109,9 @@ async def get_competitor(
             domain = None
         if domain:
             try:
-                record = await repository.get_latest_by_domain(domain)
+                record = await repository.get_latest_by_domain(
+                    domain, user_id=user["user_id"]
+                )
             except PyMongoError as exc:
                 raise DatabaseUnavailableError() from exc
 

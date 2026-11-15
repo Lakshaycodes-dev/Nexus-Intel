@@ -51,3 +51,14 @@ export function rememberAnalysis(entry: RecentAnalysisEntry): void {
     // Storage can be disabled (private mode); the scan still succeeds.
   }
 }
+
+/** Drop the local scan history (used when signing out of a workspace). */
+export function clearRecentAnalyses(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(RECENT_ANALYSES_KEY);
+    window.dispatchEvent(new CustomEvent(ANALYSIS_COMPLETE_EVENT));
+  } catch {
+    // Ignore storage failures.
+  }
+}

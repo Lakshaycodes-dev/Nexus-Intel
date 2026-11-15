@@ -91,6 +91,19 @@ def parse_sources(report_markdown: str) -> list[str]:
     return _SOURCE_HEADING_RE.findall(report_markdown or "")
 
 
+def _provenance_for(warnings: list[str]) -> str:
+    """Classify an extraction as LLM-backed or heuristic.
+
+    The fallback builders in ``utils.parser_helpers`` tag their output with a
+    warning that starts with ``fallback:``; anything else came from Gemini.
+    """
+    return (
+        "fallback"
+        if any(warning.lower().startswith("fallback:") for warning in warnings)
+        else "gemini"
+    )
+
+
 def _run_extraction(
     service: GeminiService,
     target: ExtractionTarget,
@@ -113,13 +126,12 @@ def _run_extraction(
         logger.exception("Unexpected extraction failure for %s", target.value)
         return ExtractionResult(target=target.value, error=type(exc).__name__)
 
+    warnings = list(getattr(instance, "warnings", []) or [])
     return ExtractionResult(
         target=target.value,
-        # The schema has no provenance field; warnings record the LLM-vs-fallback
-        # path, so provenance stays None unless a future schema adds it.
-        provenance=None,
+        provenance=_provenance_for(warnings),
         missing_fields=list(getattr(instance, "missing_fields", []) or []),
-        warnings=list(getattr(instance, "warnings", []) or []),
+        warnings=warnings,
         error=None,
         model=instance,
     )
@@ -180,8 +192,6 @@ def _map_pricing(pricing_model: Any) -> list[dict[str, Any]]:
         display = _money_display(plan.get("price_display"), plan.get("price"))
         if not display:
             continue
-        if not str(display).startswith(("$", "€", "£", "¥")):
-            display = f"${display}"
         annual = billing in {"annual", "yearly"} or bool(
             re.search(r"/\s*(?:yr|year)\b|per\s+year|annually", str(display), re.IGNORECASE)
         )
@@ -268,11 +278,14 @@ def build_competitor_data(
     pricing: list[dict[str, Any]] = []
     offsite_news: list[dict[str, Any]] = []
     capabilities: list[dict[str, Any]] = []
+    provenance: dict[str, str] = {}
     plan_names: set[str] = set()
 
     for result in extractions:
         if result.model is None:
             continue
+        if result.provenance:
+            provenance[result.target] = result.provenance
         if result.target == ExtractionTarget.PRICING_MATRIX.value:
             pricing = _map_pricing(result.model)
             plan_names = {row["tier"].strip().lower() for row in pricing if row.get("tier")}
@@ -292,6 +305,7 @@ def build_competitor_data(
         "offsiteNews": offsite_news,
         "capabilities": capabilities,
         "executionTimeSec": round(execution_time_sec, 2),
+        "provenance": provenance,
     }
 
 

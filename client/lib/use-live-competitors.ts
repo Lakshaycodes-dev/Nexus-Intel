@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { getCompetitor } from "./api";
+import { getCompetitor, listCompetitors } from "./api";
 import { competitorFromResponse } from "./adapters";
 import type { Competitor } from "./types";
 
@@ -14,8 +14,11 @@ interface LiveCompetitorsState {
 
 /**
  * Hydrates the static watchlist with the latest persisted analysis for each
- * competitor domain (`GET /api/v1/competitors/{domain}`). Domains without a
- * stored run (404) or an offline backend transparently keep the fixture data.
+ * competitor domain.
+ *
+ * It first asks `GET /api/v1/competitors` which domains have stored runs in the
+ * signed-in workspace, then fetches only those briefs. Domains without a run
+ * (or a signed-out/offline backend) transparently keep the fixture data.
  */
 export function useLiveCompetitors(base: Competitor[]): LiveCompetitorsState {
   const [state, setState] = useState<LiveCompetitorsState>({
@@ -29,25 +32,46 @@ export function useLiveCompetitors(base: Competitor[]): LiveCompetitorsState {
     let cancelled = false;
 
     async function load() {
-      const results = await Promise.allSettled(
+      let tracked: Set<string>;
+      try {
+        const list = await listCompetitors(controller.signal);
+        tracked = new Set(
+          list.competitors
+            .filter((entry) => entry.has_data)
+            .map((entry) => entry.domain),
+        );
+      } catch {
+        // Not signed in yet, or the backend is offline: keep the fixtures.
+        if (!cancelled) {
+          setState({ competitors: base, loading: false, liveCount: 0 });
+        }
+        return;
+      }
+
+      const results = await Promise.all(
         base.map(async (fallback) => {
-          const response = await getCompetitor(fallback.domain, controller.signal);
-          return competitorFromResponse(response, fallback) ?? fallback;
+          if (!tracked.has(fallback.domain)) {
+            return { competitor: fallback, live: false };
+          }
+          try {
+            const response = await getCompetitor(fallback.domain, controller.signal);
+            return {
+              competitor: competitorFromResponse(response, fallback) ?? fallback,
+              live: true,
+            };
+          } catch {
+            return { competitor: fallback, live: false };
+          }
         }),
       );
 
       if (cancelled) return;
 
-      let liveCount = 0;
-      const competitors = results.map((result, index) => {
-        if (result.status === "fulfilled") {
-          liveCount += 1;
-          return result.value;
-        }
-        return base[index];
+      setState({
+        competitors: results.map((result) => result.competitor),
+        loading: false,
+        liveCount: results.filter((result) => result.live).length,
       });
-
-      setState({ competitors, loading: false, liveCount });
     }
 
     load();

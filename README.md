@@ -2,8 +2,6 @@
 
 **AI-powered B2B market intelligence.** Nexus Intel crawls competitor websites, extracts pricing, packaging, capabilities and market signals, and turns the result into a dashboard your team can act on.
 
-Built by **Team Mutex Cartel** for **KriticalHacks 2026**.
-
 ---
 
 ## Why it exists

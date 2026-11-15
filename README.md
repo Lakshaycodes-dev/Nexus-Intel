@@ -1,4 +1,4 @@
-# 🌐 Nexus Intel
+ Nexus Intel
 
 **AI-powered B2B market intelligence.** Nexus Intel crawls competitor websites, extracts pricing, packaging, capabilities and market signals, and turns the result into a dashboard your team can act on.
 
@@ -18,7 +18,7 @@ Most competitive research is still a spreadsheet and a browser tab. Nexus Intel 
 
 ---
 
-## ✨ Features
+##  Features
 
 | Area | What it does |
 | --- | --- |
@@ -33,7 +33,7 @@ Most competitive research is still a spreadsheet and a browser tab. Nexus Intel 
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```text
 ┌──────────────────────┐        ┌───────────────────────────────┐
@@ -74,7 +74,7 @@ Most competitive research is still a spreadsheet and a browser tab. Nexus Intel 
 
 ---
 
-## 📂 Repository layout
+##  Repository layout
 
 ```text
 Nexus-Intel/
@@ -110,7 +110,7 @@ Nexus-Intel/
 
 ---
 
-## ✅ Prerequisites
+##  Prerequisites
 
 - **Python 3.10+**
 - **Node.js 20.9+** and npm (required by Next.js 16)
@@ -120,7 +120,7 @@ Nexus-Intel/
 
 ---
 
-## 🚀 Quick start
+##  Quick start
 
 ### 1. Backend (FastAPI)
 
@@ -173,7 +173,7 @@ The dashboard is browsable as a demo without an account. Sign up at <http://loca
 
 ---
 
-## ⚙️ Configuration
+##  Configuration
 
 Copy `.env.example` to `.env` at the repository root. Never commit real keys.
 
@@ -245,7 +245,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ---
 
-## 🔑 Authentication & workspaces
+##  Authentication & workspaces
 
 Accounts are email + password. Passwords are hashed with the stdlib `scrypt` KDF, and sessions use HS256 JWTs signed by the API — no third-party auth service is required.
 
@@ -275,7 +275,7 @@ curl -X POST http://localhost:8000/api/v1/analyze \
 
 ---
 
-## 🔌 API reference
+##  API reference
 
 Base URL: `http://localhost:8000`
 
@@ -317,7 +317,7 @@ Errors use consistent envelopes: `422` for invalid input, `401` for missing/inva
 
 ---
 
-## 🔄 How an analysis runs
+##  How an analysis runs
 
 ```text
 domain / query
@@ -359,7 +359,7 @@ domain / query
 
 ---
 
-## 🧪 Mock vs. live mode
+##  Mock vs. live mode
 
 | | `MOCK_MODE=true` (default) | `MOCK_MODE=false` |
 | --- | --- | --- |
@@ -375,7 +375,7 @@ When MongoDB is unavailable and `IN_MEMORY_PERSISTENCE=true`, analyses and track
 
 ---
 
-## 📦 Output artifacts
+##  Output artifacts
 
 Each run writes to `output/`:
 
@@ -386,7 +386,7 @@ A sample Stripe report is committed at `output/stripe_pricing_market_intelligenc
 
 ---
 
-## 🧪 Tests & checks
+##  Tests & checks
 
 ### Backend
 
@@ -424,7 +424,7 @@ npm run build
 
 ---
 
-## 🛠️ Troubleshooting
+##  Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
@@ -439,7 +439,7 @@ npm run build
 
 ---
 
-## 🔒 Safety & limitations
+##  Safety & limitations
 
 - `robots.txt` is respected by default (`CRAWL_RESPECT_ROBOTS=true`).
 - Crawl depth, page count, concurrency and request rate are bounded.
@@ -451,7 +451,6 @@ npm run build
 
 ---
 
-## 👥 Team
 
 Built by **Team Mutex Cartel** for **KriticalHacks 2026**.
 

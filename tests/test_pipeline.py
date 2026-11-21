@@ -253,6 +253,19 @@ class TestPromptEngineering(unittest.TestCase):
 
 # --------------------------------------------------------------------------- #
 class TestServicePipeline(unittest.TestCase):
+    def test_response_json_schema_is_gemini_safe(self):
+        from services.gemini_service import response_json_schema_for
+
+        schema = response_json_schema_for(PricingMatrix)
+        encoded = json.dumps(schema)
+        self.assertNotIn("additionalProperties", encoded)
+        self.assertNotIn("$defs", encoded)
+        self.assertNotIn("additional_properties", encoded)
+        plans = schema["properties"]["plans"]
+        self.assertEqual(plans["type"], "array")
+        self.assertEqual(plans["items"]["type"], "object")
+        self.assertIn("price", plans["items"]["properties"])
+
     def test_happy_path_returns_valid_instance(self):
         good = json.dumps(
             {
@@ -273,7 +286,14 @@ class TestServicePipeline(unittest.TestCase):
         # Structured-output config must be attached to the call.
         call = service._client.calls[0]
         self.assertEqual(call["config"].response_mime_type, "application/json")
-        self.assertIs(call["config"].response_schema, PricingMatrix)
+        wire_schema = call["config"].response_json_schema
+        self.assertIsInstance(wire_schema, dict)
+        self.assertNotIn("additionalProperties", json.dumps(wire_schema))
+        self.assertNotIn("$defs", wire_schema)
+        # The array items must still describe the PlanTier object.
+        plans_schema = wire_schema["properties"]["plans"]
+        self.assertEqual(plans_schema["items"]["type"], "object")
+        self.assertIn("name", plans_schema["items"]["properties"])
 
     def test_invalid_output_triggers_repair_then_success(self):
         bad = json.dumps({"target": "pricing_matrix", "plans": [{"name": "Pro", "price": "abc"}], "surprise": 1})

@@ -9,7 +9,10 @@ from .models import PageCategory, PageClassification
 
 _PATTERNS: dict[PageCategory, dict[str, tuple[str, ...]]] = {
     PageCategory.PRICING: {
-        "url": (r"pricing|plans?|packages?|cost|subscribe|billing",),
+        "url": (
+            r"pricing|plans?|packages?|cost|subscribe|billing|price-list|"
+            r"best-price|offers?|deals?",
+        ),
         "title": (r"\bpricing\b|\bplans?\b|\bsubscriptions?\b",),
         "heading": (r"\bpricing\b|\bplans?\b|\bsubscriptions?\b|\bchoose a plan\b",),
         "text": (
@@ -54,9 +57,13 @@ _PATTERNS: dict[PageCategory, dict[str, tuple[str, ...]]] = {
         ),
     },
     PageCategory.PRODUCT: {
-        "url": (r"product|products|platform|solutions?|features?",),
-        "title": (r"\bproduct\b|\bplatform\b|\bsolution\b",),
-        "heading": (r"\bproduct\b|\bplatform\b|\bsolution\b",),
+        "url": (
+            r"products?|platform|solutions?|features?|collections?|category|"
+            r"categories|catalog(?:ue)?|shop|store|electronics?|appliances?|"
+            r"mobiles?|smartphones?|laptops?|televisions?|home-appliances?",
+        ),
+        "title": (r"\bproduct\b|\bplatform\b|\bsolution\b|\bcatalogue?\b",),
+        "heading": (r"\bproduct\b|\bplatform\b|\bsolution\b|\bcatalogue?\b",),
         "text": (r"\bproduct\b", r"\bplatform\b", r"\bworkflow\b"),
     },
     PageCategory.BLOG: {

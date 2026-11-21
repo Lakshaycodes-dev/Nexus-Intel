@@ -28,6 +28,12 @@ from .models import (
     PageClassification,
     PageSnapshot,
 )
+from utils.price_bands import (
+    NO_PRICE_BANDS_MESSAGE,
+    detect_retail_category,
+    is_plausible_price,
+    rejection_note,
+)
 
 _PLAN_HEADER_RE = re.compile(r"plan|tier|package|edition|product|name", re.IGNORECASE)
 _PRICE_HEADER_RE = re.compile(r"price|cost|amount|rate", re.IGNORECASE)
@@ -51,6 +57,16 @@ _NAV_LINE_RE = re.compile(
     r"^(?:home|pricing|features?|product|solutions?|docs?|blog|about|contact|"
     r"login|sign\s*in|sign\s*up|get started|book a demo|careers|support|"
     r"privacy|terms|company|resources?|menu|search|close)$",
+    re.IGNORECASE,
+)
+# Storefront chrome that appears beside real prices. These strings are never
+# product/plan names and their adjacent numbers are never prices.
+_UI_COUNTER_RE = re.compile(
+    r"^(?:buy\s*now|add\s*to\s*(?:cart|bag)|quick\s*view|compare|wishlist|"
+    r"next|previous|prev|page\s*#?\s*\d+|showing\s+\d+|out\s+of\s+stock|"
+    r"in\s+stock|free\s+delivery|delivery\s+in\s+\d+|emi\s*(?:from|starts?)?|"
+    r"save\s*(?:₹|rs|inr|\d)|off|starting\s+at|price\s+drop|"
+    r"\d+\s*(?:results?|products?|items?|reviews?))\b",
     re.IGNORECASE,
 )
 _RELEASE_VERB_RE = re.compile(
@@ -110,9 +126,11 @@ def _is_feature_table(headers: list[str]) -> bool:
 
 def _meaningful_plan_name(name: str) -> bool:
     candidate = (name or "").strip()
-    if not candidate or len(candidate) > 120:
+    if not candidate or len(candidate) < 2 or len(candidate) > 120:
         return False
     if _NAV_LINE_RE.match(candidate):
+        return False
+    if _UI_COUNTER_RE.match(candidate):
         return False
     if re.fullmatch(r"[\d\W]+", candidate):
         return False
@@ -156,6 +174,8 @@ def _extract_pricing_tables(
     plans: dict[tuple[str, str, str], ExtractedPlan],
     usage_rates: list[dict[str, Any]],
     warnings: list[str],
+    *,
+    retail_category: str = "other",
 ) -> None:
     for table in snapshot.tables:
         headers = _normalize_headers(table)
@@ -235,6 +255,23 @@ def _extract_pricing_tables(
                             ),
                         )
                         continue
+                    if money is not None and not is_plausible_price(
+                        money["amount"],
+                        currency=money.get("currency"),
+                        display=display,
+                        category=retail_category,
+                    ):
+                        warnings.append(
+                            "rejected non-retail price "
+                            f"{display!r} on {snapshot.final_url or snapshot.url}: "
+                            + rejection_note(
+                                money["amount"],
+                                currency=money.get("currency"),
+                                display=display,
+                                category=retail_category,
+                            )
+                        )
+                        money = None
                     if money is None:
                         continue
                     period = header_period or _period_from_header(
@@ -306,6 +343,8 @@ def _extract_pricing_text(
     snapshot: PageSnapshot,
     plans: dict[tuple[str, str, str], ExtractedPlan],
     warnings: list[str],
+    *,
+    retail_category: str = "other",
 ) -> None:
     lines = [line.strip() for line in (snapshot.text or "").split("\n") if line.strip()]
     for index, line in enumerate(lines):
@@ -315,6 +354,23 @@ def _extract_pricing_text(
         display = match.group("display").strip()
         money = parse_price(display)
         if money is None:
+            continue
+        if not is_plausible_price(
+            money["amount"],
+            currency=money.get("currency"),
+            display=line,
+            category=retail_category,
+        ):
+            warnings.append(
+                "rejected non-retail price "
+                f"{display!r} on {snapshot.final_url or snapshot.url}: "
+                + rejection_note(
+                    money["amount"],
+                    currency=money.get("currency"),
+                    display=line,
+                    category=retail_category,
+                )
+            )
             continue
         # Candidate name: the same line before the price, otherwise the previous line.
         name = line[: match.start()].strip(" -–—:|")
@@ -353,12 +409,30 @@ def extract_pricing(
     source_url = ""
     currency: Optional[str] = None
 
+    snapshots = [snapshot for snapshot in snapshots if snapshot.status == "success"]
+    # The band follows the real catalogue, not the query label.
+    retail_category = detect_retail_category(
+        vendor,
+        *(snapshot.final_url or snapshot.url for snapshot in snapshots),
+        *(snapshot.title for snapshot in snapshots),
+        *(snapshot.text[:4000] for snapshot in snapshots),
+    )
+
     for snapshot in snapshots:
-        if snapshot.status != "success":
-            continue
         source_url = source_url or snapshot.final_url or snapshot.url
-        _extract_pricing_tables(snapshot, plan_map, usage_rates, warnings)
-        _extract_pricing_text(snapshot, plan_map, warnings)
+        _extract_pricing_tables(
+            snapshot,
+            plan_map,
+            usage_rates,
+            warnings,
+            retail_category=retail_category,
+        )
+        _extract_pricing_text(
+            snapshot,
+            plan_map,
+            warnings,
+            retail_category=retail_category,
+        )
         text = snapshot.text or ""
         if free_tier is None:
             free_match = re.search(
@@ -385,10 +459,22 @@ def extract_pricing(
     for plan in plans:
         currency = currency or plan.currency
 
+    priced_plans = [plan for plan in plans if plan.price is not None]
+    if priced_plans or usage_rates:
+        pricing_status = "resolved"
+        pricing_status_note = None
+    else:
+        pricing_status = "no_public_price_bands"
+        pricing_status_note = NO_PRICE_BANDS_MESSAGE
+
     missing: list[str] = []
     if not plans:
         missing.append("plans")
         warnings.append("no deterministic pricing plans detected")
+    if not priced_plans and not usage_rates:
+        missing.append("plans[].price")
+        if NO_PRICE_BANDS_MESSAGE not in warnings:
+            warnings.append(NO_PRICE_BANDS_MESSAGE)
     if not usage_rates:
         missing.append("usage_based_rates")
 
@@ -397,10 +483,13 @@ def extract_pricing(
         "vendor": vendor or None,
         "source_url": source_url or None,
         "currency": currency,
+        "retail_category": retail_category,
         "plans": [plan.to_dict() for plan in plans],
         "usage_based_rates": usage_rates,
         "free_tier": free_tier,
         "enterprise_note": enterprise_note,
+        "pricing_status": pricing_status,
+        "pricing_status_note": pricing_status_note,
         "missing_fields": missing,
         "warnings": warnings,
         "source_snapshots": [
@@ -669,6 +758,9 @@ def to_schema_payload(payload: dict[str, Any], target: str) -> dict[str, Any]:
             "vendor": payload.get("vendor"),
             "source_url": payload.get("source_url"),
             "currency": payload.get("currency"),
+            "retail_category": payload.get("retail_category") or "other",
+            "pricing_status": payload.get("pricing_status") or "resolved",
+            "pricing_status_note": payload.get("pricing_status_note"),
             "plans": [
                 {key: value for key, value in plan.items() if key not in {"evidence"}}
                 for plan in payload.get("plans") or []

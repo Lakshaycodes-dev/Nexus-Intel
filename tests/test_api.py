@@ -327,8 +327,8 @@ def test_derive_query_matches_pipeline_convention():
 # --- Bonus: pricing mapping robustness ------------------------------------- #
 
 
-def test_map_pricing_handles_fallback_billing_period_quirks():
-    """The heuristic fallback can emit non-enum billing periods (e.g. '$0')."""
+def test_map_pricing_drops_zero_price_quirks():
+    """A misparsed ``$0``/billing-period cell must never reach the frontend."""
     from types import SimpleNamespace
 
     from app.services.orchestrator_service import _map_pricing
@@ -354,14 +354,32 @@ def test_map_pricing_handles_fallback_billing_period_quirks():
         }
     )
     rows = _map_pricing(model)
-    assert rows[0] == {
-        "tier": "Starter",
-        "monthly": "$0",
-        "annual": "",
-        "features": ["1", "Basic dashboard"],  # duplicate price cell dropped
-    }
-    assert rows[1]["annual"] == "$199/yr"
-    assert rows[1]["monthly"] == ""
+    assert [row["tier"] for row in rows] == ["Scale"]
+    assert rows[0]["annual"] == "$199/yr"
+    assert rows[0]["monthly"] == ""
+    assert rows[0]["features"] == ["SSO"]
+
+
+def test_map_pricing_filters_display_only_bogus_price():
+    """Older payloads without a numeric ``price`` are still validated."""
+    from types import SimpleNamespace
+
+    from app.services.orchestrator_service import _map_pricing
+
+    model = SimpleNamespace(
+        model_dump=lambda: {
+            "retail_category": "electronics",
+            "currency": "INR",
+            "plans": [
+                {"name": "Counter", "price": None, "price_display": "₹1"},
+                {"name": "Blog stat", "price": None, "price_display": "0.74"},
+                {"name": "Television", "price": None, "price_display": "₹49,990"},
+            ],
+        }
+    )
+    rows = _map_pricing(model)
+    assert [row["tier"] for row in rows] == ["Television"]
+    assert rows[0]["monthly"] == "₹49,990"
 
 
 def test_map_pricing_preserves_inr_display():

@@ -20,6 +20,12 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Optional
 
+from .price_bands import (
+    NO_PRICE_BANDS_MESSAGE,
+    detect_retail_category,
+    is_plausible_price,
+)
+
 __all__ = [
     "MarkdownTable",
     "clean_markdown",
@@ -401,13 +407,39 @@ def _guess_currency(text: str) -> Optional[str]:
     return None
 
 
+def _retail_money(value: Any, *, category: str) -> Optional[dict[str, Any]]:
+    """Parse a money token and reject UI counters / out-of-band retail prices.
+
+    This is the fallback-path equivalent of the Pydantic band validator. The
+    returned dict is ``None`` whenever the token cannot be trusted as a plan
+    price, so callers can skip the row instead of emitting ``₹0``/``₹1``.
+    """
+    money = parse_money(value)
+    if money is None:
+        return None
+    if not is_plausible_price(
+        money["amount"],
+        currency=money.get("currency"),
+        display=money.get("display") or value,
+        category=category,
+    ):
+        return None
+    return money
+
+
 def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> dict:
-    """Build a :class:`PricingMatrix` payload from tables / plan headings."""
+    """Build a :class:`PricingMatrix` payload from tables / plan headings.
+
+    Every price is filtered through :func:`_retail_money`. If no plausible
+    public price remains, the payload carries an explicit
+    ``pricing_status="no_public_price_bands"`` instead of a fabricated band.
+    """
     warnings: list[str] = []
     missing: list[str] = []
     plans: list[dict] = []
     usage_rates: list[dict] = []
     free_tier: dict | None = None
+    retail_category = detect_retail_category(markdown, source_url)
 
     tables = list(iter_markdown_tables(markdown))
     plan_words = re.compile(r"plan|tier|price|pricing|month|year|seat|seat|free|pro|basic|enterprise|starter|team|business", re.I)
@@ -425,10 +457,20 @@ def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> 
                 if not name:
                     continue
                 price_cell = next(
-                    (v for k, v in record.items() if v and re.search(r"price|cost|\$", k + " " + v, re.I)),
+                    (v for k, v in record.items() if v and re.search(r"price|cost|\$|₹", k + " " + v, re.I)),
                     None,
                 )
-                money = parse_money(price_cell)
+                money = _retail_money(price_cell, category=retail_category)
+                if money is None:
+                    contact = re.search(
+                        r"contact\s+sales|custom|quote|call us", str(price_cell or ""), re.I
+                    )
+                    if not contact:
+                        if price_cell:
+                            warnings.append(
+                                f"fallback: ignored non-retail price {str(price_cell)[:40]!r}"
+                            )
+                        continue
                 period_cell = next(
                     (v for k, v in record.items() if re.search(r"period|billing|cycle|interval", k, re.I)),
                     price_cell or "",
@@ -450,6 +492,7 @@ def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> 
                             for v in record.values()
                             if v and v.strip() and v.strip() != name.strip()
                         ][:6],
+                        "notes": None if money else "contact sales / custom pricing",
                     }
                 )
         elif re.search(
@@ -509,7 +552,7 @@ def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> 
                 current = None
             if current is not None and bullet:
                 body = bullet.group(1).strip()
-                money = parse_money(body)
+                money = _retail_money(body, category=retail_category)
                 if money and current["price"] is None and re.search(
                     r"\d", body
                 ):
@@ -520,16 +563,24 @@ def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> 
                         current["billing_period"] = "monthly"
                     elif re.search(r"/\s*(yr|year)|per year|annual", body, re.I):
                         current["billing_period"] = "yearly"
+                elif money is None and parse_money(body) is not None:
+                    warnings.append(
+                        f"fallback: ignored non-retail price {body[:40]!r}"
+                    )
                 else:
                     current["included_features"].append(body)
             elif current is not None and not heading and not bullet:
                 stripped = line.strip()
                 if stripped and current["price"] is None:
-                    money = parse_money(stripped)
-                    if money and re.search(r"[$€£¥]|\d", stripped):
+                    money = _retail_money(stripped, category=retail_category)
+                    if money and re.search(r"[$€£¥₹]|\d", stripped):
                         current["price"] = money["amount"]
                         current["price_display"] = money["display"]
                         current["currency"] = money["currency"]
+                    elif money is None and parse_money(stripped) is not None:
+                        warnings.append(
+                            f"fallback: ignored non-retail price {stripped[:40]!r}"
+                        )
 
     if re.search(r"\bfree\b|\btrial\b", markdown, re.I):
         snippet = re.search(
@@ -543,21 +594,52 @@ def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> 
 
     enterprise = re.search(r"([^\n]*enterprise[^\n]*(?:sales|custom|contact)[^\n]*)", markdown, re.I)
 
+    # Keep unpriced plans only when they are explicitly "contact sales" rows.
+    plans = [
+        plan
+        for plan in plans
+        if plan.get("price") is not None
+        or re.search(
+            r"contact\s+sales|custom|quote|call us",
+            str(plan.get("notes") or ""),
+            re.I,
+        )
+    ]
+    priced_plans = [plan for plan in plans if plan.get("price") is not None]
+
+    if priced_plans or usage_rates:
+        pricing_status = "resolved"
+        pricing_status_note = None
+    else:
+        pricing_status = "no_public_price_bands"
+        pricing_status_note = NO_PRICE_BANDS_MESSAGE
+
     if not plans and not usage_rates:
         missing.extend(["plans", "usage_based_rates"])
         warnings.append("fallback: no recognisable pricing table or plan headings found")
+    if not priced_plans and not usage_rates:
+        if "plans[].price" not in missing:
+            missing.append("plans[].price")
+        if NO_PRICE_BANDS_MESSAGE not in warnings:
+            warnings.append(NO_PRICE_BANDS_MESSAGE)
 
     headings = [h for h in (_HEADING_RE.match(line).group(1) for line in markdown.split("\n") if _HEADING_RE.match(line))]
+    # The provenance detector keys off a warning that *starts* with "fallback:";
+    # always keep it even when more specific warnings were collected.
+    warnings = ["fallback: extracted by heuristic parser, not the LLM"] + warnings
     return {
         "vendor": _guess_vendor(markdown, headings),
         "source_url": source_url,
         "currency": _guess_currency(markdown),
+        "retail_category": retail_category,
         "plans": plans,
         "usage_based_rates": usage_rates,
         "free_tier": free_tier,
         "enterprise_note": enterprise.group(1).strip() if enterprise else None,
+        "pricing_status": pricing_status,
+        "pricing_status_note": pricing_status_note,
         "missing_fields": missing,
-        "warnings": warnings or ["fallback: extracted by heuristic parser, not the LLM"],
+        "warnings": warnings,
     }
 
 

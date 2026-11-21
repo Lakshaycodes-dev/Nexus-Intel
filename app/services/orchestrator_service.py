@@ -37,6 +37,7 @@ from schemas.pydantic_schemas import TARGET_SCHEMAS, ExtractionTarget
 from services.collection.pipeline import CollectionError
 from services.gemini_service import GeminiService, ExtractionError
 from utils import parser_helpers as ph
+from utils.price_bands import detect_retail_category, is_plausible_price
 
 from app import database
 from app.errors import PipelineExecutionError
@@ -177,6 +178,20 @@ def _money_display(*values: Any) -> str:
     return ""
 
 
+_MONEY_IN_TEXT_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _display_amount(display: str) -> Optional[float]:
+    """Best-effort numeric value from a price cell (``₹49,990`` -> 49990)."""
+    match = _MONEY_IN_TEXT_RE.search(display or "")
+    if not match:
+        return None
+    try:
+        return float(match.group(0).replace(",", ""))
+    except ValueError:  # pragma: no cover - regex guarantees a number
+        return None
+
+
 def _map_pricing(pricing_model: Any) -> list[dict[str, Any]]:
     """PricingMatrix -> frontend ``pricing`` rows.
 
@@ -184,14 +199,34 @@ def _map_pricing(pricing_model: Any) -> list[dict[str, Any]]:
     frontend receives both prices instead of duplicate plans. The heuristic
     fallback parser can emit non-enum ``billing_period`` values (e.g. the raw
     price cell), so the display text is also inspected.
+
+    This is a final defence-in-depth layer: even if an older extractor or a
+    malformed model slips a ``₹0`` / ``₹1`` / blog statistic through, the API
+    response never exposes it as a plan price.
     """
     dump = _model_dump(pricing_model)
+    category = dump.get("retail_category") or detect_retail_category(
+        dump.get("vendor"), dump.get("source_url")
+    )
+    default_currency = dump.get("currency")
     rows: dict[str, dict[str, Any]] = {}
     for plan in dump.get("plans") or []:
-        billing = (plan.get("billing_period") or "").lower()
-        display = _money_display(plan.get("price_display"), plan.get("price"))
-        if not display:
+        raw_display = _money_display(plan.get("price_display"), plan.get("price"))
+        amount = plan.get("price")
+        if amount is None:
+            amount = _display_amount(raw_display)
+        # "Contact sales" has no number and is still a valid, unpriced plan.
+        if amount is not None and not is_plausible_price(
+            amount,
+            currency=plan.get("currency") or default_currency,
+            display=raw_display,
+            category=category,
+        ):
             continue
+        if not raw_display:
+            continue
+        display = raw_display
+        billing = (plan.get("billing_period") or "").lower()
         annual = billing in {"annual", "yearly"} or bool(
             re.search(r"/\s*(?:yr|year)\b|per\s+year|annually", str(display), re.IGNORECASE)
         )

@@ -1,10 +1,11 @@
 """Strict Pydantic schemas for every extraction target.
 
 The schemas in this module are the single source of truth for the JSON contract
-enforced on Gemini. They are passed directly to the Google GenAI SDK as
-``response_schema`` so the model is constrained to generate valid JSON, and they
-are re-validated on the client side because the API-side constraint is a
-best-effort guarantee, not a hard one.
+enforced on Gemini. The service derives a Gemini-safe JSON Schema from them via
+``GeminiService`` (``response_json_schema``) because the Gemini Developer API
+rejects ``additionalProperties``/``$defs`` in ``response_schema``. The same
+schemas re-validate the parsed response on the client side because the API-side
+constraint is a best-effort guarantee, not a hard one.
 
 Design rules
 ------------
@@ -31,6 +32,14 @@ from pydantic import (
     Field,
     field_validator,
     model_validator,
+)
+
+from utils.price_bands import (
+    MIN_PLAN_PRICE,
+    NO_PRICE_BANDS_MESSAGE,
+    detect_retail_category,
+    is_plausible_price,
+    rejection_note,
 )
 
 __all__ = [
@@ -347,7 +356,12 @@ class PlanTier(ExtractionModel):
     @field_validator("price", mode="before")
     @classmethod
     def _normalize_price(cls, value: Any) -> Optional[float]:
-        return _coerce_money(value)
+        amount = _coerce_money(value)
+        # Pagination counters, cart badges and blog statistics routinely show
+        # up as "0", "1" or "0.74". Those are never plan prices.
+        if amount is not None and amount < MIN_PLAN_PRICE:
+            return None
+        return amount
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -358,6 +372,14 @@ class PlanTier(ExtractionModel):
     @classmethod
     def _normalize_period(cls, value: Any) -> BillingPeriod:
         return _coerce_billing_period(value)
+
+    @model_validator(mode="after")
+    def _hide_rejected_price(self) -> "PlanTier":
+        """Never echo a rejected number back to the UI as a display string."""
+        if self.price is None and self.price_display:
+            if _coerce_money(self.price_display) is not None:
+                self.price_display = None
+        return self
 
 
 class UsageBasedRate(ExtractionModel):
@@ -414,6 +436,13 @@ class PricingMatrix(ExtractionModel):
     currency: Optional[str] = Field(
         default=None, description="Default ISO 4217 currency of the page."
     )
+    retail_category: Literal["electronics", "appliances", "other"] = Field(
+        default="other",
+        description=(
+            "Retail vertical used to pick the plausible price band. Electronics "
+            "and appliances use the Indian retail band ₹500–₹5,00,000."
+        ),
+    )
     plans: list[PlanTier] = Field(
         default_factory=list, description="Published plans, in source order."
     )
@@ -424,17 +453,96 @@ class PricingMatrix(ExtractionModel):
     enterprise_note: Optional[str] = Field(
         default=None, description="Text about enterprise / custom pricing."
     )
+    pricing_status: Literal["resolved", "no_public_price_bands"] = Field(
+        default="resolved",
+        description=(
+            "Set to 'no_public_price_bands' when no plan carried a plausible "
+            "retail price. Never invent a band to fill this in."
+        ),
+    )
+    pricing_status_note: Optional[str] = Field(
+        default=None,
+        description="Human-readable explanation for pricing_status.",
+    )
 
     @field_validator("currency", mode="before")
     @classmethod
     def _normalize_currency(cls, value: Any) -> Optional[str]:
         return _coerce_currency(value)
 
+    @field_validator("retail_category", mode="before")
+    @classmethod
+    def _normalize_retail_category(cls, value: Any) -> str:
+        if value is None:
+            return "other"
+        normalized = detect_retail_category(value)
+        return normalized
+
+    @field_validator("pricing_status", mode="before")
+    @classmethod
+    def _normalize_pricing_status(cls, value: Any) -> str:
+        if value is None:
+            return "resolved"
+        text = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+        if text in {"no_public_price_bands", "no_price_bands", "unresolved", "empty"}:
+            return "no_public_price_bands"
+        if NO_PRICE_BANDS_MESSAGE.lower().replace(" ", "_") in text:
+            return "no_public_price_bands"
+        return "resolved"
+
     @model_validator(mode="after")
-    def _flag_missing_pricing(self) -> "PricingMatrix":
-        if not self.plans and not self.usage_based_rates:
-            if "plans" not in self.missing_fields:
-                self.missing_fields.append("plans")
+    def _enforce_retail_price_bands(self) -> "PricingMatrix":
+        """Drop implausible plan prices and report an honest status.
+
+        The LLM is asked to obey the same band, but structured-output decoding
+        is best-effort. This validator is the hard guarantee: a number that
+        looks like a pagination counter, cart badge or blog statistic becomes
+        ``null`` instead of being displayed as a rupee price.
+        """
+        rejected: list[str] = []
+        for index, plan in enumerate(self.plans):
+            if plan.price is None:
+                continue
+            if is_plausible_price(
+                plan.price,
+                currency=plan.currency or self.currency,
+                display=plan.price_display,
+                category=self.retail_category,
+            ):
+                continue
+            note = rejection_note(
+                plan.price,
+                currency=plan.currency or self.currency,
+                display=plan.price_display,
+                category=self.retail_category,
+            )
+            plan.price = None
+            plan.price_display = None
+            plan.notes = f"{plan.notes}; {note}" if plan.notes else note
+            rejected.append(f"plans[{index}].price: {note}")
+
+        if rejected:
+            self.warnings.append(
+                "rejected implausible plan prices (not displayed): "
+                + "; ".join(rejected[:6])
+            )
+
+        resolved = [plan for plan in self.plans if plan.price is not None]
+        # Metered-only pages are resolved too; usage rates legitimately sit
+        # below the retail floor and are validated by UsageBasedRate.
+        if resolved or self.usage_based_rates:
+            self.pricing_status = "resolved"
+            self.pricing_status_note = None
+        else:
+            self.pricing_status = "no_public_price_bands"
+            self.pricing_status_note = NO_PRICE_BANDS_MESSAGE
+            if NO_PRICE_BANDS_MESSAGE not in self.warnings:
+                self.warnings.append(NO_PRICE_BANDS_MESSAGE)
+            if not self.plans and not self.usage_based_rates:
+                if "plans" not in self.missing_fields:
+                    self.missing_fields.append("plans")
+                if "plans[].price" not in self.missing_fields:
+                    self.missing_fields.append("plans[].price")
         return self
 
 

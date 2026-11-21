@@ -60,7 +60,7 @@ from .tracking import (
 )
 from .url_utils import (
     UnsafeURLError,
-    canonicalize_url,
+    canonicalize_crawl_url,
     ensure_http_url,
     is_internal_url,
     normalize_host,
@@ -588,12 +588,19 @@ async def collect_competitor(
     if domain:
         try:
             root_url = ensure_http_url(domain)
-            root_url = site_root(root_url)
+            # Preserve an explicit catalogue path/query (e.g.
+            # /collections/televisions?page=2) instead of collapsing every
+            # target to the corporate root.
+            if urlsplit(root_url).path in {"", "/"}:
+                root_url = site_root(root_url)
+            else:
+                root_url = canonicalize_crawl_url(root_url, root_url) or site_root(root_url)
             resolved_domain = normalize_host(urlsplit(root_url).hostname or "")
         except UnsafeURLError as exc:
             raise CollectionError(str(exc)) from exc
     elif re.match(r"^https?://", (query or "").strip(), re.IGNORECASE):
         root_url = ensure_http_url(query.strip())
+        root_url = canonicalize_crawl_url(root_url, root_url) or root_url
         resolved_domain = normalize_host(urlsplit(root_url).hostname or "")
     elif mock:
         resolved_domain = mock_domain_for_query(query)

@@ -30,10 +30,11 @@ import httpx
 from .config import CollectionSettings
 from .url_utils import (
     UnsafeURLError,
-    canonicalize_url,
+    canonicalize_crawl_url,
     check_host_syntax,
     clean_text_urls,
     ensure_http_url,
+    is_catalog_url,
     normalize_host,
 )
 
@@ -283,7 +284,12 @@ def _verify_candidate(result: SearchResult, name: str) -> Optional[tuple[str, st
     except UnsafeURLError:
         return None
     root = f"{urlsplit(url).scheme.lower()}://{host}"
-    return host.removeprefix("www."), root
+    # If search returned a real catalogue/category page, start there instead
+    # of throwing the path away and crawling the corporate root.
+    resolved_url = canonicalize_crawl_url(root, url) or root
+    if not is_catalog_url(resolved_url):
+        resolved_url = root
+    return host.removeprefix("www."), resolved_url
 
 
 async def resolve_official_domain(
@@ -305,10 +311,13 @@ async def resolve_official_domain(
             host = normalize_host(urlsplit(url).hostname)
             check_host_syntax(host, allow_private=settings.allow_private_hosts)
             root = f"{urlsplit(url).scheme.lower()}://{host}"
+            resolved_url = canonicalize_crawl_url(root, url) or root
+            if not is_catalog_url(resolved_url):
+                resolved_url = root
             return ResolvedDomain(
                 query=name,
                 domain=host.removeprefix("www."),
-                url=root,
+                url=resolved_url,
                 evidence=["input was already a website URL/domain"],
             )
         except UnsafeURLError as exc:

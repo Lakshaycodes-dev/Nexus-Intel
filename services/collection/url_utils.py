@@ -89,6 +89,53 @@ _BAD_EXTENSIONS = (
     ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
 )
 
+# Editorial / corporate paths that pollute retail price extraction with blog
+# statistics, funding figures and press-release prose.
+_EDITORIAL_PATH_RE = re.compile(
+    r"/(?:blog|article|articles|insights?|resources?|guides?|learn|about(?:-us)?|"
+    r"company|team|leadership|careers?|jobs?|press|press-releases?|newsroom|news|"
+    r"media|investors?|contact|faqs?|help|support)(?:/|$)",
+    re.IGNORECASE,
+)
+
+# Product listing / category / catalogue surfaces and product detail pages.
+_CATALOG_PATH_RE = re.compile(
+    r"/(?:"
+    r"collections?|category|categories|catalog(?:ue)?|shop|store|products?|"
+    r"plp|listing|electronics?|appliances?|mobiles?|mobile-phones?|smartphones?|"
+    r"laptops?|tvs?|televisions?|air-conditioners?|refrigerators?|"
+    r"washing-machines?|home-appliances?|kitchen|audio|headphones?|earbuds?|"
+    r"cameras?|computers?|gaming|smartwatches?|wearables?|brands?|deals?|"
+    r"offers?|new-arrivals|bestsellers?"
+    r")(?:/|$)"
+    r"|/(?:[^/]+/)?p/[^/]+(?:/|$)"
+    r"|/product(?:s)?/[^/]+(?:/|$)",
+    re.IGNORECASE,
+)
+
+# Query keys that carry catalogue state worth preserving across pagination.
+_CATALOG_QUERY_KEYS = frozenset(
+    {
+        "page", "p", "pg", "pno", "pageno", "page_no", "pagenumber", "start",
+        "offset", "from", "category", "categoryid", "category_id", "cat",
+        "catid", "brand", "brandid", "brand_id", "collection", "family",
+        "series", "segment", "type", "model", "sort", "order", "limit",
+        "per_page", "pagesize", "page_size", "min", "max", "price_min",
+        "price_max",
+    }
+)
+_PAGINATION_QUERY_KEYS = frozenset(
+    {"page", "p", "pg", "pno", "pageno", "page_no", "pagenumber", "start", "offset"}
+)
+_QUERY_NOISE_KEYS = frozenset(
+    {
+        "cart", "addtocart", "add_to_cart", "wishlist", "compare", "session",
+        "sessionid", "jsessionid", "sid", "token", "csrf", "nonce", "color",
+        "colour", "size", "variant", "stock", "availability", "click",
+        "source", "src",
+    }
+)
+
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
@@ -212,6 +259,29 @@ def _is_tracking_param(key: str) -> bool:
     return any(lowered.startswith(prefix) for prefix in _TRACKING_PARAM_PREFIXES if prefix not in _TRACKING_PARAMS)
 
 
+def is_editorial_url(url: str) -> bool:
+    """Return ``True`` for blog / about / press / newsroom style pages.
+
+    Those pages are the main source of bogus "prices" such as ``0.74`` or
+    ``88%`` (article statistics) and funding figures, so retail discovery
+    excludes them unless the caller explicitly seeds one.
+    """
+    try:
+        path = urlsplit(url).path or "/"
+    except ValueError:
+        return True
+    return bool(_EDITORIAL_PATH_RE.search(path))
+
+
+def is_catalog_url(url: str) -> bool:
+    """Return ``True`` for catalogue, category and product-detail paths."""
+    try:
+        path = urlsplit(url).path or "/"
+    except ValueError:
+        return False
+    return bool(_CATALOG_PATH_RE.search(path))
+
+
 def canonicalize_url(
     base: str,
     url: str,
@@ -219,10 +289,16 @@ def canonicalize_url(
     strip_fragments: bool = True,
     drop_tracking: bool = True,
     keep_query: bool = False,
+    catalog_query: bool = False,
 ) -> Optional[str]:
     """Resolve ``url`` against ``base`` and return a canonical absolute URL.
 
     Returns ``None`` for non-http(s), asset-like or unparseable links.
+
+    ``catalog_query`` keeps only pagination/filter/brand keys, which is what a
+    product listing needs. Without it every query parameter is either preserved
+    (``keep_query=True``) or dropped (default), which previously collapsed
+    ``?page=2`` links back onto page one.
     """
     if not url:
         return None
@@ -252,13 +328,40 @@ def canonicalize_url(
     query_pairs: list[tuple[str, str]] = []
     if keep_query:
         for key, value in parse_qsl(parts.query, keep_blank_values=False):
+            lowered = key.lower()
             if drop_tracking and _is_tracking_param(key):
                 continue
+            if lowered in _QUERY_NOISE_KEYS:
+                continue
+            if catalog_query and lowered not in _CATALOG_QUERY_KEYS:
+                continue
+            if lowered in _PAGINATION_QUERY_KEYS:
+                # Keep real page numbers only; ignore "page=all", "page=0", etc.
+                if not value.isdigit() or not (1 <= int(value) <= 200):
+                    continue
+            if lowered in {"min", "max", "price_min", "price_max"}:
+                if not value.replace(".", "", 1).isdigit():
+                    continue
             query_pairs.append((key, value))
     query_pairs.sort()
     query = urlencode(query_pairs, doseq=True)
     fragment = "" if strip_fragments else parts.fragment
     return urlunsplit((parts.scheme.lower(), netloc, quote(path, safe="/:@!$&'()*+,;=-._~%"), query, fragment))
+
+
+def canonicalize_crawl_url(base: str, url: str) -> Optional[str]:
+    """Canonicalise a crawl target, preserving catalogue pagination state.
+
+    This is the function discovery should use (instead of the default
+    ``canonicalize_url``): it keeps meaningful query parameters and collapses
+    tracking/cart/session noise.
+    """
+    candidate = canonicalize_url(base, url, keep_query=True)
+    if candidate is None:
+        return None
+    if is_catalog_url(candidate):
+        return canonicalize_url(base, url, keep_query=True, catalog_query=True)
+    return candidate
 
 
 def site_root(url: str) -> str:

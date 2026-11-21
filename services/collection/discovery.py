@@ -8,6 +8,7 @@ from rendered DOM, which the pipeline merges in for JavaScript-heavy sites.
 from __future__ import annotations
 
 import asyncio
+import heapq
 import logging
 import re
 from collections import deque
@@ -22,10 +23,13 @@ from .config import CollectionSettings
 from .models import CATEGORY_PRIORITY, DiscoveredPage, PageCategory
 from .url_utils import (
     UnsafeURLError,
+    canonicalize_crawl_url,
     canonicalize_url,
     dedupe_urls,
     ensure_http_url,
     extract_links_from_html,
+    is_catalog_url,
+    is_editorial_url,
     is_internal_url,
     normalize_host,
     parse_sitemap,
@@ -45,7 +49,8 @@ _SITEMAP_CANDIDATES = (
 
 _HIGH_PRIORITY_URL = re.compile(
     r"pricing|plans?|packages?|cost|changelog|release-notes|whats-new|"
-    r"features?|product|announcements?|press|news",
+    r"features?|products?|collections?|category|categories|catalog(?:ue)?|"
+    r"shop|store|price-list|deals?|offers?",
     re.IGNORECASE,
 )
 _LOW_PRIORITY_URL = re.compile(
@@ -53,6 +58,24 @@ _LOW_PRIORITY_URL = re.compile(
     r"login|signin|sign-in|signup|register|cart|checkout|account|"
     r"unsubscribe|sitemap|feed|rss",
     re.IGNORECASE,
+)
+
+# Fallback entry points for electronics retailers whose sitemap exposes only
+# individual SKUs. These are probed (HTTP 200 + HTML) before being scheduled.
+_RETAIL_CATALOG_CANDIDATES = (
+    "/collections/",
+    "/collections/electronics/",
+    "/category/",
+    "/categories/",
+    "/shop/",
+    "/products/",
+    "/c/",
+    "/electronics/",
+    "/appliances/",
+    "/mobiles/",
+    "/televisions/",
+    "/laptops/",
+    "/home-appliances/",
 )
 
 
@@ -188,12 +211,12 @@ class SiteDiscovery:
             processed += 1
             if is_index:
                 for loc in locations:
-                    candidate = canonicalize_url(url, loc)
+                    candidate = canonicalize_crawl_url(url, loc)
                     if candidate:
                         queue.append((candidate, depth + 1))
                 continue
             for loc in locations:
-                candidate = canonicalize_url(url, loc)
+                candidate = canonicalize_crawl_url(url, loc)
                 if candidate:
                     discovered.append(
                         DiscoveredPage(
@@ -209,15 +232,22 @@ class SiteDiscovery:
 
     async def _link_discovery(self, seed_url: str, root_host: str) -> list[DiscoveredPage]:
         discovered: list[DiscoveredPage] = []
-        queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
+        # Priority queue: product/category pages are fetched before blogs,
+        # about pages and press releases. Without this, a 12-page crawl budget
+        # is routinely consumed by corporate navigation.
+        queue: list[tuple[int, int, str]] = [
+            (_priority_for_url(seed_url), 0, seed_url)
+        ]
         visited: set[str] = set()
         fetches = 0
         while queue and fetches < max(3, self.settings.max_pages):
-            url, depth = queue.popleft()
+            _, depth, url = heapq.heappop(queue)
             if url in visited:
                 continue
             visited.add(url)
             if depth > self.settings.max_depth:
+                continue
+            if is_editorial_url(url):
                 continue
             if not self.robots.can_fetch(url):
                 logger.info("robots.txt disallows %s", url)
@@ -230,10 +260,10 @@ class SiteDiscovery:
                 continue
             html = response.text
             for raw in extract_links_from_html(html):
-                candidate = canonicalize_url(url, raw)
+                candidate = canonicalize_crawl_url(url, raw)
                 if not candidate or not is_internal_url(candidate, root_host):
                     continue
-                if candidate in visited:
+                if candidate in visited or is_editorial_url(candidate):
                     continue
                 page = DiscoveredPage(
                     url=candidate,
@@ -243,13 +273,48 @@ class SiteDiscovery:
                 )
                 discovered.append(page)
                 if depth + 1 < self.settings.max_depth:
-                    queue.append((candidate, depth + 1))
+                    heapq.heappush(
+                        queue, (_priority_for_url(candidate), depth + 1, candidate)
+                    )
         return discovered
+
+    async def _catalog_entry_pages(self, root: str) -> list[DiscoveredPage]:
+        """Probe common Indian retail catalogue paths when sitemaps miss them.
+
+        Only real HTML pages that return a non-error status are scheduled, so a
+        404 on ``/collections/`` does not become a failed crawl entry.
+        """
+        found: list[DiscoveredPage] = []
+        for path in _RETAIL_CATALOG_CANDIDATES:
+            candidate = canonicalize_crawl_url(root + "/", path)
+            if not candidate or not is_internal_url(candidate, normalize_host(urlsplit(root).hostname or "")):
+                continue
+            if is_editorial_url(candidate) or not self.robots.can_fetch(candidate):
+                continue
+            response = await self._get(candidate)
+            if response is None or response.status_code >= 400:
+                continue
+            if "html" not in response.headers.get("content-type", "").lower():
+                continue
+            final_url = canonicalize_crawl_url(candidate, str(response.url)) or candidate
+            found.append(
+                DiscoveredPage(
+                    url=final_url,
+                    source="catalog_entry",
+                    depth=0,
+                    priority=1,
+                )
+            )
+            if len(found) >= 4:
+                break
+        if found:
+            logger.info("Discovered %s retail catalogue entry pages under %s", len(found), root)
+        return found
 
     async def discover(self, seed_url: str, *, max_pages: Optional[int] = None) -> list[DiscoveredPage]:
         max_pages = max_pages or self.settings.max_pages
         seed = ensure_http_url(seed_url)
-        seed = canonicalize_url(seed, seed, keep_query=False) or seed
+        seed = canonicalize_crawl_url(seed, seed) or seed
         try:
             await validate_public_url(seed, allow_private=self.settings.allow_private_hosts)
         except UnsafeURLError as exc:
@@ -261,10 +326,17 @@ class SiteDiscovery:
         sitemap_pages = await self._sitemap_locations(root, seed)
         link_pages = await self._link_discovery(seed, root_host)
 
+        # If neither sitemaps nor links exposed a catalogue/category page, probe
+        # the standard Indian retail paths directly. This is what stops a scan
+        # from ending up on the corporate root or a blog index.
+        catalog_pages: list[DiscoveredPage] = []
+        if not any(is_catalog_url(page.url) for page in sitemap_pages + link_pages):
+            catalog_pages = await self._catalog_entry_pages(root)
+
         pages: list[DiscoveredPage] = [
             DiscoveredPage(url=seed, source="seed", depth=0, priority=_priority_for_url(seed))
         ]
-        for page in sitemap_pages + link_pages:
+        for page in sitemap_pages + link_pages + catalog_pages:
             if _is_relevant_url(page.url):
                 pages.append(page)
 
@@ -298,6 +370,8 @@ def _replace_interval(settings: CollectionSettings, interval: float) -> Collecti
 
 
 def _is_relevant_url(url: str) -> bool:
+    if is_editorial_url(url):
+        return False
     if _LOW_PRIORITY_URL.search(url):
         return False
     return True
@@ -308,6 +382,17 @@ def _priority_for_url(url: str) -> int:
     path = urlsplit(url).path or "/"
     if _LOW_PRIORITY_URL.search(path):
         return 80
+    if is_editorial_url(url):
+        # Blogs/about/press are excluded from retail scans; keep them last in
+        # case a caller explicitly needs them.
+        return 95
+    if is_catalog_url(url):
+        # Product/category/catalogue pages beat everything except an explicit
+        # pricing page, which the classifier below still scores at 0.
+        classification = classify_page(url)
+        if classification.primary == PageCategory.PRICING:
+            return 0
+        return 1
     classification = classify_page(url)
     if classification.primary != PageCategory.GENERAL:
         return CATEGORY_PRIORITY[classification.primary]
@@ -329,12 +414,12 @@ def merge_discovered_links(
     known = {page.url for page in existing}
     additions: list[DiscoveredPage] = []
     for raw in links:
-        candidate = canonicalize_url(f"https://{root_host}/", raw)
+        candidate = canonicalize_crawl_url(f"https://{root_host}/", raw)
         if not candidate or candidate in known:
             continue
         if not is_internal_url(candidate, root_host):
             continue
-        if _LOW_PRIORITY_URL.search(candidate):
+        if is_editorial_url(candidate) or _LOW_PRIORITY_URL.search(candidate):
             continue
         known.add(candidate)
         additions.append(

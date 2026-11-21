@@ -16,6 +16,15 @@ New backend-specific variables (placeholders only in ``.env.example``):
 * ``CORS_ORIGINS``                 - Comma-separated list of allowed origins
   for the frontend dev server.
 * ``ANALYSIS_TIMEOUT_SECONDS``     - Hard timeout around one pipeline run.
+
+Additive voice-briefing settings (server-side only; never sent to the browser):
+
+* ``ELEVENLABS_API_KEY``           - ElevenLabs API key.
+* ``ELEVENLABS_VOICE_ID``          - Voice used for the spoken briefing.
+* ``ELEVENLABS_MODEL_ID``          - TTS model (defaults to ``eleven_flash_v2_5``).
+* ``ELEVENLABS_API_URL``           - Optional API base override.
+* ``ELEVENLABS_TIMEOUT_SECONDS``   - HTTP timeout for one synthesis request.
+* ``BRIEFING_MAX_SCRIPT_CHARS``    - Upper bound on the spoken script length.
 """
 
 from __future__ import annotations
@@ -111,4 +120,26 @@ ALLOW_REGISTRATION: bool = _as_bool(os.getenv("ALLOW_REGISTRATION", "true"), Tru
 
 ANALYSIS_TIMEOUT_SECONDS: float = _as_float(
     os.getenv("ANALYSIS_TIMEOUT_SECONDS", "300"), 300.0
+)
+
+# --- ElevenLabs voice briefing --------------------------------------------- #
+
+# Secrets stay in the root ``.env``; they are read here and used only by
+# server-side code. The dashboard never receives the key or the raw voice ID.
+ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "").strip()
+# Free ElevenLabs plans can speak premade voices through the API; library
+# voices return HTTP 402. Set a premade voice ID unless the plan is paid.
+ELEVENLABS_VOICE_ID: str = os.getenv("ELEVENLABS_VOICE_ID", "").strip()
+ELEVENLABS_MODEL_ID: str = (
+    os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5").strip()
+    or "eleven_flash_v2_5"
+)
+ELEVENLABS_API_URL: str = os.getenv(
+    "ELEVENLABS_API_URL", "https://api.elevenlabs.io/v1"
+).rstrip("/")
+ELEVENLABS_TIMEOUT_SECONDS: float = _as_float(
+    os.getenv("ELEVENLABS_TIMEOUT_SECONDS", "45"), 45.0
+)
+BRIEFING_MAX_SCRIPT_CHARS: int = max(
+    200, _as_int(os.getenv("BRIEFING_MAX_SCRIPT_CHARS", "4000"), 4000)
 )

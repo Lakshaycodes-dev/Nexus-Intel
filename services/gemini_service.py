@@ -209,7 +209,17 @@ RUPEES / INR VALIDATION (hard rules):
   pricing_status: "no_public_price_bands" with
   pricing_status_note: "{NO_PRICE_BANDS_MESSAGE}". Never fabricate ₹0/₹1.
 - Set retail_category to "electronics", "appliances" or "other" based on the
-  catalogue; the service re-checks this from the source URL/markdown.""",
+  catalogue; the service re-checks this from the source URL/markdown.
+
+E-COMMERCE CATEGORY GRIDS (Haldiram's, grocery, sweets, snacks, Shopify/WooCommerce):
+- Treat every VISIBLE product tile as one "plans" entry: "name" is the product
+  name copied verbatim, "price" is its numeric MRP/sale price, "price_display"
+  is the exact string beside it (e.g. "₹250") and "currency" is "INR".
+- Set "billing_period" to "one_time" for physical products. Do not mistake
+  pagination numbers, cart counters, ratings, review counts or filter values
+  for product prices.
+- Keep every valid rupee amount (for example ₹30, ₹250 or ₹450 for snacks) and
+  never emit 0 or 1; the service applies the final retail price floor.""",
     ExtractionTarget.FEATURE_COMPARISON: """\
 Extract the FEATURE COMPARISON matrix from the markdown:
 - Group features under their nearest heading as "categories".
@@ -505,6 +515,15 @@ class GeminiService:
     # Convenience wrappers ------------------------------------------------- #
     def extract_pricing(self, markdown: Optional[str], *, source_url: Optional[str] = None) -> PricingMatrix:
         return self.extract(ExtractionTarget.PRICING_MATRIX, markdown, source_url=source_url)  # type: ignore[return-value]
+
+    def extract_products(self, html_text: str, *, source_url: Optional[str] = None) -> PricingMatrix:
+        """Extract visible product names/prices from a category page's text chunk.
+
+        Uses the same structured-output schema and validation path as pricing;
+        product tiles are represented as ``plans`` entries with a one-time
+        billing period (see the e-commerce guidance in the prompt brief).
+        """
+        return self.extract_pricing(html_text, source_url=source_url)
 
     def extract_features(self, markdown: Optional[str], *, source_url: Optional[str] = None) -> FeatureComparison:
         return self.extract(ExtractionTarget.FEATURE_COMPARISON, markdown, source_url=source_url)  # type: ignore[return-value]

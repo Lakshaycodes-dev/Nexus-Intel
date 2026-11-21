@@ -16,6 +16,7 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { LiveCompetitors } from "@/components/dashboard/live-competitors";
 import { RecentScans } from "@/components/dashboard/recent-scans";
 import { SignalFeed } from "@/components/dashboard/signal-feed";
+import { VoiceBriefing } from "@/components/dashboard/voice-briefing";
 import { Scanner } from "@/components/scanner";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,10 @@ export default function DashboardPage() {
       </section>
 
       <RecentScans />
+
+      <section id="briefing" className="mt-5 scroll-mt-24">
+        <VoiceBriefing />
+      </section>
 
       <div className="mt-7 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_356px]">
         <section id="competitors" className="scroll-mt-24">

@@ -56,11 +56,100 @@ def _pricing_text(name: str, annual: bool) -> str:
     )
 
 
+_HALDIRAMS_JSONLD = """\
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Haldiram's snacks and sweets",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "item": {
+        "@type": "Product",
+        "name": "Haldiram's Aloo Bhujia",
+        "offers": {"@type": "Offer", "price": "250", "priceCurrency": "INR"}
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "item": {
+        "@type": "Product",
+        "name": "Haldiram's Kaju Katli",
+        "offers": {"@type": "Offer", "price": "450", "priceCurrency": "INR"}
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "item": {
+        "@type": "Product",
+        "name": "Haldiram's Mini Sampler",
+        "offers": {"@type": "Offer", "price": "1", "priceCurrency": "INR"}
+      }
+    }
+  ]
+}
+"""
+
+_HALDIRAMS_HTML = """\
+<html><head><title>Haldiram's - Snacks, Namkeen & Sweets</title>
+<script type="application/ld+json">
+__JSONLD__
+</script>
+</head><body>
+<main><h1>Snacks, Namkeen & Sweets</h1>
+<div class="product-grid">
+  <div class="product-card" data-price="250"><div class="card-body">
+    <h3 class="product-name">Haldiram's Aloo Bhujia</h3><span class="price">₹250</span>
+  </div></div>
+  <div class="product-item" data-price="450"><div class="card-body">
+    <h3 class="product-name">Haldiram's Kaju Katli</h3><span class="price">₹450</span>
+  </div></div>
+  <div class="product-card" data-price="1"><div class="card-body">
+    <h3 class="product-name">Haldiram's mini pack</h3><span class="price">₹1</span>
+  </div></div>
+</div>
+</main></body></html>
+""".replace("__JSONLD__", _HALDIRAMS_JSONLD)
+
+_HALDIRAMS_TEXT = """\
+Haldiram's - Snacks, Namkeen & Sweets
+Snacks, Namkeen & Sweets
+Haldiram's Aloo Bhujia
+₹250
+Add to cart
+Haldiram's Kaju Katli
+₹450
+Add to cart
+Showing 1-3 products
+"""
+
+
+def _haldirams_snapshot(root: str, now: str) -> PageSnapshot:
+    url = f"{root}/products/namkeen-sweets"
+    return PageSnapshot(
+        url=url,
+        final_url=url,
+        title="Haldiram's - Snacks, Namkeen & Sweets",
+        meta_description="Shop Haldiram's namkeen, sweets and snacks online.",
+        headings=["Snacks, Namkeen & Sweets", "All products"],
+        text=_HALDIRAMS_TEXT,
+        html=_HALDIRAMS_HTML,
+        links=[f"{root}/products/sweets", f"{root}/about-us"],
+        retrieval_method="httpx_static",
+        retrieved_at=now,
+    )
+
+
 def mock_snapshots(domain: str) -> list[PageSnapshot]:
     name = _label(domain)
     scheme = "https"
     root = f"{scheme}://{domain or 'example.com'}"
     now = iso_now()
+    if "haldiram" in (domain or "").lower():
+        return [_haldirams_snapshot(root, now)]
     pages = [
         PageSnapshot(
             url=f"{root}/pricing",

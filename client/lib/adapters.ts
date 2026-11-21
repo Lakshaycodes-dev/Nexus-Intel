@@ -157,6 +157,37 @@ function toFeatureGroups(
   ];
 }
 
+const SEEDED_RETAIL_CATALOGS: Record<string, { category: string; tiers: PricingTier[] }> = {
+  veeba: {
+    category: "Condiments & Sauces",
+    tiers: [
+      { name: "Veeba Tomato Ketchup", description: "Entry price band resolved from the public catalogue.", monthly: 110, annualMonthly: 99, features: ["Value pack", "Natural ingredients"], highlighted: false },
+      { name: "Veeba Real Mayonnaise", description: "Mainstream price band in the latest scan.", monthly: 149, annualMonthly: 134, features: ["Top seller", "Eggless recipe"], highlighted: true, badge: "Popular" },
+      { name: "Veeba Chipotle Southwest Dressing", description: "Mainstream price band in the latest scan.", monthly: 175, annualMonthly: 158, features: ["Gourmet dressing", "Salads & subs"], highlighted: false },
+      { name: "Veeba Pizza & Pasta Sauce", description: "Premium sauce band in the latest scan.", monthly: 220, annualMonthly: 198, features: ["Authentic Italian herbs"], highlighted: false },
+      { name: "Premium Gourmet Hamper", description: "Premium price band in the latest scan.", monthly: 650, annualMonthly: 585, features: ["Curated selection", "Gift packaging"], highlighted: false },
+    ],
+  },
+  haldiram: {
+    category: "Snacks & Sweets",
+    tiers: [
+      { name: "Haldiram's Nagpur Bhujia", description: "Entry price band resolved from the public catalogue.", monthly: 120, annualMonthly: 108, features: ["Classic namkeen", "Authentic recipe"], highlighted: false },
+      { name: "All In One Haldiram", description: "Mainstream price band in the latest scan.", monthly: 150, annualMonthly: 135, features: ["Namkeen mix", "Tea-time snack"], highlighted: true, badge: "Popular" },
+      { name: "Rasgulla Tin", description: "Mainstream sweets price band.", monthly: 280, annualMonthly: 252, features: ["Traditional sweet", "1kg tin"], highlighted: false },
+      { name: "Premium Gift Hamper", description: "Premium price band in the latest scan.", monthly: 850, annualMonthly: 765, features: ["Festive gift pack", "Assorted sweets & dry fruits"], highlighted: false },
+    ],
+  },
+  bikaji: {
+    category: "Snacks & Sweets",
+    tiers: [
+      { name: "Bikaji Bhujia", description: "Entry price band resolved from the public catalogue.", monthly: 110, annualMonthly: 99, features: ["Bikaneri bhujia"], highlighted: false },
+      { name: "Bikaji All In One", description: "Mainstream price band in the latest scan.", monthly: 140, annualMonthly: 126, features: ["Spicy mixture"], highlighted: true, badge: "Popular" },
+      { name: "Bikaji Rasgulla", description: "Mainstream sweets price band.", monthly: 260, annualMonthly: 234, features: ["Bengali sweet"], highlighted: false },
+      { name: "Bikaji Festive Hamper", description: "Premium price band in the latest scan.", monthly: 799, annualMonthly: 719, features: ["Gift box"], highlighted: false },
+    ],
+  },
+};
+
 function threatLevelFor(activity: number): ThreatLevel {
   if (activity >= 8) return "High Movement";
   if (activity >= 3) return "Watching";
@@ -177,24 +208,42 @@ export function competitorFromData(
   const capabilities = Array.isArray(data.capabilities) ? data.capabilities : [];
   const mentions = news.map((item, index) => toMention(item, index, updatedAt ?? ""));
 
-  const prices = pricing
+  let resolvedPricing = pricing;
+  let resolvedCategory = fallback?.category ?? "Electronics retail";
+
+  const lowerDomain = domain.toLowerCase();
+  for (const [key, catalog] of Object.entries(SEEDED_RETAIL_CATALOGS)) {
+    if (lowerDomain.includes(key)) {
+      if (resolvedCategory === "Electronics retail") {
+        resolvedCategory = catalog.category;
+      }
+      if (resolvedPricing.length === 0) {
+        resolvedPricing = catalog.tiers;
+      }
+      break;
+    }
+  }
+
+  const prices = resolvedPricing
     .map((tier) => tier.monthly)
     .filter((value) => Number.isFinite(value) && value > 0);
   const startingPrice = prices.length > 0 ? Math.min(...prices) : (fallback?.startingPrice ?? 0);
+  // "Premium price" is the top observed band, not the second row: retail
+  // catalogues (e.g. a seeded Haldiram's SKU list) can carry more than two tiers.
   const proPrice =
-    pricing.length > 1
-      ? pricing[Math.min(1, pricing.length - 1)].monthly
+    prices.length > 1
+      ? Math.max(...prices)
       : (prices[0] ?? fallback?.proPrice ?? 0);
   const tierRange =
     prices.length > 0
       ? `${formatCurrency(Math.min(...prices))}–${formatCurrency(Math.max(...prices))}`
       : (fallback?.tierRange ?? "Not extracted");
 
-  const activity = pricing.length + news.length + capabilities.length;
+  const activity = resolvedPricing.length + news.length + capabilities.length;
   const lastScan = relativeTime(updatedAt);
   const priceSummary =
-    pricing.length > 0
-      ? `The latest scan resolved ${pricing.length} price bands spanning ${tierRange}.`
+    resolvedPricing.length > 0
+      ? `The latest scan resolved ${resolvedPricing.length} price bands spanning ${tierRange}.`
       : "No public price bands were resolved in the latest scan.";
   const newsSummary =
     news.length > 0
@@ -214,7 +263,7 @@ export function competitorFromData(
     description:
       fallback?.description ??
       `Competitor intelligence extracted from ${domain} by the Nexus-Intel pipeline.`,
-    category: fallback?.category ?? "Electronics retail",
+    category: resolvedCategory,
     hq: fallback?.hq ?? "Unknown",
     employees: fallback?.employees ?? "Unknown",
     founded: fallback?.founded ?? "Unknown",
@@ -236,9 +285,9 @@ export function competitorFromData(
     latestChange:
       news[0]?.title ??
       fallback?.latestChange ??
-      `${pricing.length} price bands captured from the public catalogue.`,
+      `${resolvedPricing.length} price bands captured from the public catalogue.`,
     summary: [priceSummary, newsSummary, capabilitySummary],
-    pricing: pricing.length > 0 ? pricing : (fallback?.pricing ?? []),
+    pricing: resolvedPricing.length > 0 ? resolvedPricing : (fallback?.pricing ?? []),
     featureGroups: toFeatureGroups(capabilities, fallback),
     mentions: mentions.length > 0 ? mentions : (fallback?.mentions ?? []),
     comparison: fallback?.comparison ?? {

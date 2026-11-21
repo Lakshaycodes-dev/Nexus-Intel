@@ -89,6 +89,33 @@ class FakeRepository:
         )
         return [dict(record) for record in ordered[:limit]]
 
+    async def list_by_user_since(
+        self, user_id: str, since: datetime, *, limit: int = 200
+    ) -> list[dict]:
+        """Mirror of AnalysisRepository.list_by_user_since (oldest first)."""
+
+        def _created(record: dict) -> datetime | None:
+            value = record.get("created_at")
+            if not isinstance(value, datetime):
+                return None
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+
+        matches = []
+        for record in self.records.values():
+            if record.get("user_id") != user_id:
+                continue
+            if record.get("status") != "completed":
+                continue
+            created = _created(record)
+            if created is None or created < since:
+                continue
+            matches.append(record)
+
+        matches.sort(key=lambda record: _created(record) or since)
+        return [dict(record) for record in matches[-max(1, limit) :]]
+
 
 class FakeUserRepository:
     """In-memory stand-in for UserRepository."""

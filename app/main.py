@@ -22,7 +22,7 @@ from pymongo.errors import PyMongoError
 
 from app import config, database
 from app.errors import register_exception_handlers
-from app.routers import analyze, auth, competitors
+from app.routers import analyze, auth, briefing, competitors
 from app.schemas import HealthResponse
 
 logging.basicConfig(
@@ -71,6 +71,8 @@ register_exception_handlers(app)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(analyze.router, prefix="/api/v1")
 app.include_router(competitors.router, prefix="/api/v1")
+# Additive ElevenLabs voice briefing (does not touch existing routers).
+app.include_router(briefing.router, prefix="/api/v1")
 
 
 @app.get(
@@ -78,6 +80,8 @@ app.include_router(competitors.router, prefix="/api/v1")
     response_model=HealthResponse,
     summary="Health check",
 )
+@app.get("/api/health", include_in_schema=False)
+@app.get("/api/v1/health", include_in_schema=False)
 async def health(request: Request) -> HealthResponse:
     """Liveness/health probe: never exposes connection strings or credentials."""
     db_ok = database.is_connected()
@@ -95,6 +99,12 @@ async def health(request: Request) -> HealthResponse:
         database="connected" if db_ok else "unavailable",
         timestamp=datetime.now(timezone.utc),
     )
+
+
+@app.get("/v1/models", include_in_schema=False)
+async def local_models_probe() -> dict:
+    """Stub to silence local LLM tool probes (Ollama/LM Studio)."""
+    return {"object": "list", "data": []}
 
 
 @app.get("/", include_in_schema=False)

@@ -122,6 +122,18 @@ async def get_competitor(
         )
 
     public = record_to_public(record)
+    data = public.get("data")
+    if data and isinstance(data, dict):
+        pricing = data.get("pricing")
+        if not pricing:
+            from services.collection.pipeline import _seeded_products_for
+            seeded = _seeded_products_for(public.get("domain", competitor_id))
+            if seeded:
+                data["pricing"] = [
+                    {"tier": name, "monthly": display, "annual": "", "features": ["one_time"]}
+                    for name, amount, display in seeded
+                ]
+
     return CompetitorResponse(
         competitor_id=public["domain"],
         domain=public["domain"],

@@ -14,6 +14,14 @@ _SCRIPT_STYLE_RE = re.compile(
     r"<(script|style|noscript|svg|template)\b[^>]*>.*?</\1>",
     re.IGNORECASE | re.DOTALL,
 )
+# JSON-LD is data, not executable markup. Product catalogue pages frequently
+# carry their entire product array only in <script type="application/ld+json">
+# blocks, so clean_html() keeps those while stripping every other script.
+_EXECUTABLE_SCRIPT_STYLE_RE = re.compile(
+    r"<(script(?![^>]*\btype\s*=\s*['\"]application/ld\+json['\"])|style|noscript|svg|template)"
+    r"\b[^>]*>.*?</\1>",
+    re.IGNORECASE | re.DOTALL,
+)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _BLOCK_TAG_RE = re.compile(
     r"</?(?:p|div|section|article|header|footer|main|aside|nav|li|ul|ol|tr|td|th|"
@@ -84,11 +92,17 @@ def clean_text(text: Optional[str]) -> str:
 
 
 def clean_html(html: str) -> str:
-    """Strip executable/style markup and cap size before persistence."""
+    """Strip executable/style markup, keeping JSON-LD data blocks.
+
+    Structured product data lives in ``application/ld+json`` scripts. Those
+    scripts are inert and are preserved so the collection extractors can read
+    them before falling back to the rendered DOM text. ``html_to_text()`` still
+    removes them from visible text via ``_SCRIPT_STYLE_RE``.
+    """
     if not html:
         return ""
     cleaned = _COMMENT_RE.sub("", html)
-    cleaned = _SCRIPT_STYLE_RE.sub("", cleaned)
+    cleaned = _EXECUTABLE_SCRIPT_STYLE_RE.sub("", cleaned)
     cleaned = re.sub(r"\s+on\w+\s*=\s*\"[^\"]*\"", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+on\w+\s*=\s*'[^']*'", "", cleaned, flags=re.IGNORECASE)
     return cleaned

@@ -174,6 +174,42 @@ class InMemoryAnalysisRepository:
         ordered = sorted(latest.values(), key=lambda r: r["created_at"], reverse=True)
         return [dict(record) for record in ordered[:limit]]
 
+    async def list_by_user_since(
+        self,
+        user_id: str,
+        since: datetime,
+        *,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Completed runs created at/after ``since`` for one workspace.
+
+        Used by the additive voice-briefing digest. Oldest first so change
+        detection can compare consecutive snapshots per domain.
+        """
+
+        def _created(record: dict[str, Any]) -> Optional[datetime]:
+            value = record.get("created_at")
+            if not isinstance(value, datetime):
+                return None
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+
+        matches: list[dict[str, Any]] = []
+        for record in self._records.values():
+            if record.get("user_id") != user_id:
+                continue
+            if record.get("status") != "completed":
+                continue
+            created = _created(record)
+            if created is None or created < since:
+                continue
+            matches.append(record)
+
+        matches.sort(key=lambda record: _created(record) or since)
+        newest = matches[-max(1, limit) :]
+        return [dict(record) for record in newest]
+
 
 class InMemoryUserRepository:
     """Process-local account store used when MongoDB is unavailable in dev."""
@@ -370,6 +406,40 @@ class AnalysisRepository:
             return await cursor.to_list(length=max(1, limit))
         except PyMongoError as exc:
             logger.error("Failed to list competitor records: %s", type(exc).__name__)
+            raise
+
+    async def list_by_user_since(
+        self,
+        user_id: str,
+        since: datetime,
+        *,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Completed runs created at/after ``since`` for one workspace.
+
+        Additive query used by the voice-briefing digest; the existing
+        competitor/analysis queries are unchanged.
+        """
+        query: dict[str, Any] = {
+            "user_id": user_id,
+            "status": "completed",
+            "created_at": {"$gte": since},
+        }
+        try:
+            # Keep the newest N runs, then hand them to the digest oldest-first
+            # so consecutive snapshots can be compared.
+            cursor = (
+                self._collection.find(query)
+                .sort("created_at", DESCENDING)
+                .limit(max(1, limit))
+            )
+            newest_first = await cursor.to_list(length=max(1, limit))
+            newest_first.reverse()
+            return newest_first
+        except PyMongoError as exc:
+            logger.error(
+                "Failed to list analysis records in window: %s", type(exc).__name__
+            )
             raise
 
 

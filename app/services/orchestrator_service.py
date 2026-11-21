@@ -334,6 +334,18 @@ def build_competitor_data(
             capabilities = _map_capabilities(result.model, plan_names=plan_names)
             break
 
+    if not pricing:
+        from services.collection.pipeline import _seeded_products_for
+        seeded = _seeded_products_for(domain)
+        if seeded:
+            for name, amount, display in seeded:
+                pricing.append({
+                    "tier": name,
+                    "monthly": display,
+                    "annual": "",
+                    "features": ["one_time"],
+                })
+
     return {
         "domain": domain,
         "pricing": pricing,

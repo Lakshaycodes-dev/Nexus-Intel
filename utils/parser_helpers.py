@@ -582,6 +582,34 @@ def fallback_pricing_matrix(markdown: str, source_url: Optional[str] = None) -> 
                             f"fallback: ignored non-retail price {stripped[:40]!r}"
                         )
 
+    if not plans:
+        # Check if structured intelligence is embedded in the report
+        for block in re.finditer(r"\{[\s\S]*?\}", markdown):
+            try:
+                data = loads_lenient(block.group(0))
+                if isinstance(data, dict):
+                    pricing_obj = data.get("pricing") if "pricing" in data else (data if data.get("target") == "pricing_matrix" else None)
+                    if isinstance(pricing_obj, dict) and pricing_obj.get("plans"):
+                        for plan in pricing_obj["plans"]:
+                            amount = plan.get("price")
+                            display = plan.get("price_display")
+                            name = plan.get("name")
+                            if name and (amount is not None or display):
+                                plans.append({
+                                    "name": str(name).strip(),
+                                    "price": float(amount) if amount is not None else None,
+                                    "price_display": str(display or (f"₹{amount}" if amount is not None else "")),
+                                    "currency": plan.get("currency") or pricing_obj.get("currency") or "INR",
+                                    "billing_period": str(plan.get("billing_period") or "one_time"),
+                                    "seats": plan.get("seats"),
+                                    "included_features": plan.get("included_features") or [],
+                                    "notes": plan.get("notes"),
+                                })
+                        if plans:
+                            break
+            except Exception:
+                continue
+
     if re.search(r"\bfree\b|\btrial\b", markdown, re.I):
         snippet = re.search(
             r"([^\n]*(?:free|trial)[^\n]*)", markdown, re.I

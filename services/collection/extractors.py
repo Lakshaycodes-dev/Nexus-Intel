@@ -7,11 +7,17 @@ contracts, so downstream validation accepts the payload without changes.
 
 from __future__ import annotations
 
+import json
+import math
 import re
+from html.parser import HTMLParser
 from typing import Any, Iterable, Optional
 from urllib.parse import urljoin
 
+from utils.parser_helpers import loads_lenient
+
 from .cleaning import (
+    clean_text,
     extract_meta_description,
     find_date,
     first_paragraphs,
@@ -86,6 +92,47 @@ _BILLING_ENUM = {
     "per_request", "usage", "other",
 }
 
+# --- Structured-data / dynamic-grid fallbacks ------------------------------ #
+_JSONLD_SCRIPT_RE = re.compile(
+    r"<script\b[^>]*\btype\s*=\s*(['\"])application/ld\+json\1[^>]*>(.*?)</script\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SCHEMA_PRODUCT_TYPES = frozenset(
+    {"product", "productgroup", "individualproduct", "productmodel"}
+)
+_SCHEMA_CHILD_KEYS = (
+    "@graph", "itemListElement", "item", "mainEntity", "about", "subjectOf",
+    "hasVariant", "offers",
+)
+_CURRENCY_SYMBOLS = {"₹": "INR", "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY"}
+
+# Generic Indian-storefront grid selectors. These are deliberately broad: the
+# exact framework class is irrelevant as long as the card carries a name and a
+# price. Framework-specific selectors can still live in the caller's CSS.
+_PRODUCT_CARD_CLASS_RE = re.compile(
+    r"(?:^|\s)(?:product[\s_-]?(?:card|item|tile|box|listing|grid[\s_-]?item)|"
+    r"card[\s_-]?body|goods[\s_-]?item|sp[\s_-]?product|item[\s_-]?card)(?:\s|$)",
+    re.IGNORECASE,
+)
+_NAME_CLASS_RE = re.compile(
+    r"(?:^|\s)(?:product[\s_-]?(?:name|title)|card[\s_-]?title|title|name)(?:\s|$)",
+    re.IGNORECASE,
+)
+_PRICE_CLASS_RE = re.compile(
+    r"(?:^|\s)(?:price|amount|cost|mrp|offer[\s_-]?price|sale[\s_-]?price|"
+    r"special[\s_-]?price)(?:\s|$)",
+    re.IGNORECASE,
+)
+_PRICE_TOKEN_RE = re.compile(
+    r"(?P<symbol>₹|\bINR\b|\bRs\.?\s*|[$€£])\s*"
+    r"(?P<amount>\d[\d,]*(?:\.\d{1,2})?)",
+    re.IGNORECASE,
+)
+_VOID_TAGS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+     "meta", "param", "source", "track", "wbr"}
+)
+
 
 def _normalize_headers(table: dict[str, Any]) -> list[str]:
     return [str(header or "").strip().lower() for header in table.get("headers") or []]
@@ -157,6 +204,14 @@ def _plan_key(plan: ExtractedPlan) -> tuple[str, str, str]:
 
 def _merge_plan(plans: dict[tuple[str, str, str], ExtractedPlan], plan: ExtractedPlan) -> None:
     key = _plan_key(plan)
+    if (
+        plan.price is not None
+        and plan.seats is None
+        and plan.billing_period in {"one_time", "other"}
+    ):
+        # JSON-LD ("INR 250") and rendered text ("₹250") describe the same
+        # product. Collapse them by name + amount instead of echoing it twice.
+        key = (plan.name.strip().lower(), "one_time", f"#{plan.price:g}")
     existing = plans.get(key)
     if existing is None:
         plans[key] = plan
@@ -167,6 +222,521 @@ def _merge_plan(plans: dict[tuple[str, str, str], ExtractedPlan], plan: Extracte
     for evidence in plan.evidence:
         if evidence.snippet not in {e.snippet for e in existing.evidence}:
             existing.evidence.append(evidence)
+
+
+def _valid_price(
+    amount: Any,
+    *,
+    currency: Any = None,
+    display: Any = None,
+    category: str = "other",
+) -> Optional[float]:
+    """Return a real retail price, or ``None`` for UI noise (including 0/1).
+
+    ``is_plausible_price`` already enforces ``MIN_PLAN_PRICE``; the explicit
+    ``> 1`` guard keeps the rule obvious at every new extraction entry point.
+    """
+    try:
+        value = float(amount)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value) or value <= 1:
+        return None
+    if not is_plausible_price(
+        value, currency=currency, display=display, category=category
+    ):
+        return None
+    return value
+
+
+def _symbol_currency(symbol: str) -> Optional[str]:
+    token = (symbol or "").strip()
+    if token.lower().startswith("rs"):
+        return "INR"
+    return _CURRENCY_SYMBOLS.get(token) or normalize_currency(token)
+
+
+def _schema_display(amount: float, currency: Optional[str]) -> str:
+    code = (currency or "").upper()
+    symbol = _CURRENCY_SYMBOLS.get(code)
+    number = f"{amount:g}"
+    return f"{symbol}{number}" if symbol else (f"{code} {number}" if code else number)
+
+
+def _jsonld_blocks(html: str) -> Iterable[Any]:
+    """Decode every ``application/ld+json`` script into a Python object."""
+    for match in _JSONLD_SCRIPT_RE.finditer(html or ""):
+        raw = (match.group(2) or "").strip()
+        if not raw:
+            continue
+        raw = re.sub(r"^\s*//\s*<!\[CDATA\[", "", raw).strip()
+        raw = re.sub(r"\]\]>\s*$", "", raw).strip()
+        try:
+            yield json.loads(raw)
+        except (ValueError, TypeError):
+            try:
+                yield loads_lenient(raw)
+            except Exception:
+                continue
+
+
+def _schema_types(node: dict[str, Any]) -> set[str]:
+    raw = node.get("@type") or node.get("type") or []
+    if isinstance(raw, str):
+        raw = [raw]
+    return {str(item).strip().lower() for item in raw if item is not None}
+
+
+def _iter_schema_nodes(node: Any) -> Iterable[dict[str, Any]]:
+    """Yield Product-like nodes from @graph / ItemList / Offer trees."""
+    if isinstance(node, list):
+        for item in node:
+            yield from _iter_schema_nodes(item)
+        return
+    if not isinstance(node, dict):
+        return
+    types = _schema_types(node)
+    looks_like_product = bool(types & _SCHEMA_PRODUCT_TYPES) or (
+        bool(node.get("name") or node.get("title"))
+        and any(
+            key in node
+            for key in ("offers", "price", "priceSpecification", "lowPrice")
+        )
+    )
+    if looks_like_product:
+        yield node
+    for key in _SCHEMA_CHILD_KEYS:
+        child = node.get(key)
+        if child:
+            yield from _iter_schema_nodes(child)
+
+
+def _schema_price(node: dict[str, Any]) -> tuple[Any, Optional[str]]:
+    """Return ``(raw_price, currency)`` from a Product/Offer schema node."""
+    candidates: list[dict[str, Any]] = [node]
+    for key in ("offers", "priceSpecification"):
+        value = node.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+        elif isinstance(value, list):
+            candidates.extend(item for item in value if isinstance(item, dict))
+    for candidate in candidates:
+        raw = candidate.get("price")
+        if raw is None:
+            raw = candidate.get("lowPrice")
+        spec: Any = candidate.get("priceSpecification")
+        if raw is None and isinstance(spec, dict):
+            raw = spec.get("price") or spec.get("lowPrice")
+        elif raw is None and isinstance(spec, list) and spec and isinstance(spec[0], dict):
+            raw = spec[0].get("price") or spec[0].get("lowPrice")
+        if raw is None:
+            continue
+        currency = (
+            candidate.get("priceCurrency")
+            or candidate.get("currency")
+            or node.get("priceCurrency")
+            or node.get("currency")
+        )
+        if not currency and isinstance(spec, dict):
+            currency = spec.get("priceCurrency")
+        return raw, currency
+    return None, None
+
+
+def _extract_pricing_jsonld(
+    snapshot: PageSnapshot,
+    plans: dict[tuple[str, str, str], ExtractedPlan],
+    warnings: list[str],
+    *,
+    retail_category: str = "other",
+) -> int:
+    """Layer 1: Product/ItemList JSON-LD, before any DOM text parsing."""
+    if not snapshot.html:
+        return 0
+    url = snapshot.final_url or snapshot.url
+    added = 0
+    for block in _jsonld_blocks(snapshot.html):
+        for node in _iter_schema_nodes(block):
+            name = clean_text(str(node.get("name") or node.get("title") or ""))
+            if not _meaningful_plan_name(name):
+                continue
+            raw_price, currency = _schema_price(node)
+            if raw_price is None:
+                continue
+            money = parse_price(raw_price)
+            if money is None:
+                continue
+            code = normalize_currency(currency) or money.get("currency")
+            display = _schema_display(money["amount"], code)
+            amount = _valid_price(
+                money["amount"],
+                currency=currency or code,
+                display=display,
+                category=retail_category,
+            )
+            if amount is None:
+                warnings.append(
+                    f"rejected non-retail JSON-LD price {str(raw_price)!r} for {name!r} on {url}"
+                )
+                continue
+            _merge_plan(
+                plans,
+                ExtractedPlan(
+                    name=name[:200],
+                    price=amount,
+                    price_display=display,
+                    currency=code,
+                    billing_period="one_time",
+                    evidence=[Evidence(url, f"JSON-LD Product: {name} / {display}", "json-ld")],
+                ),
+            )
+            added += 1
+    return added
+
+
+class _MicrodataProductParser(HTMLParser):
+    """Collect itemtype=Product blocks and their itemprop name/price/currency."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.products: list[dict[str, str]] = []
+        self._open: list[int] = []
+        self._stack: list[dict[str, Any]] = []
+
+    @staticmethod
+    def _assign(product: dict[str, str], prop: str, value: Any) -> None:
+        text = clean_text(value)
+        if not text:
+            return
+        if prop in {"name", "title"} and not product["name"]:
+            product["name"] = text
+        elif prop in {"price", "lowprice"} and not product["price"]:
+            product["price"] = text
+        elif prop in {"pricecurrency", "currency"} and not product["currency"]:
+            product["currency"] = text
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        tag = tag.lower()
+        attr = {str(key).lower(): (value or "") for key, value in attrs}
+        prop = str(attr.get("itemprop") or "").strip().lower()
+        owns_product = False
+        if "product" in str(attr.get("itemtype") or "").lower():
+            self.products.append({"name": "", "price": "", "currency": ""})
+            self._open.append(len(self.products) - 1)
+            owns_product = True
+        index = self._open[-1] if self._open else None
+        content = attr.get("content") or attr.get("value") or ""
+        if index is not None and prop and content:
+            self._assign(self.products[index], prop, content)
+        if tag in _VOID_TAGS:
+            return
+        self._stack.append(
+            {"tag": tag, "prop": prop, "product": index, "owns_product": owns_product}
+        )
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag.lower() not in _VOID_TAGS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index]["tag"] == tag:
+                closed = self._stack[index:]
+                del self._stack[index:]
+                for frame in reversed(closed):
+                    if frame["owns_product"] and self._open:
+                        self._open.pop()
+                return
+
+    def handle_data(self, data: str) -> None:
+        for frame in reversed(self._stack):
+            if frame["prop"] and frame["product"] is not None:
+                self._assign(self.products[frame["product"]], frame["prop"], data)
+
+
+def _extract_pricing_microdata(
+    snapshot: PageSnapshot,
+    plans: dict[tuple[str, str, str], ExtractedPlan],
+    warnings: list[str],
+    *,
+    retail_category: str = "other",
+) -> int:
+    """Layer 1b: schema.org microdata embedded in ordinary HTML elements."""
+    if not snapshot.html or "itemtype" not in snapshot.html.lower():
+        return 0
+    parser = _MicrodataProductParser()
+    try:
+        parser.feed(snapshot.html)
+        parser.close()
+    except Exception:
+        return 0
+    url = snapshot.final_url or snapshot.url
+    added = 0
+    for product in parser.products:
+        name = clean_text(product.get("name") or "")
+        raw_price = clean_text(product.get("price") or "")
+        if not _meaningful_plan_name(name) or not raw_price:
+            continue
+        money = parse_price(raw_price)
+        if money is None:
+            continue
+        token = _PRICE_TOKEN_RE.search(raw_price)
+        code = (
+            normalize_currency(product.get("currency"))
+            or (_symbol_currency(token.group("symbol")) if token else None)
+            or money.get("currency")
+        )
+        display = token.group(0).strip() if token else _schema_display(money["amount"], code)
+        amount = _valid_price(
+            money["amount"], currency=code, display=display, category=retail_category
+        )
+        if amount is None:
+            warnings.append(
+                f"rejected non-retail microdata price {raw_price!r} for {name!r} on {url}"
+            )
+            continue
+        _merge_plan(
+            plans,
+            ExtractedPlan(
+                name=name[:200],
+                price=amount,
+                price_display=display,
+                currency=code,
+                billing_period="one_time",
+                evidence=[Evidence(url, f"microdata Product: {name} / {display}", "microdata")],
+            ),
+        )
+        added += 1
+    return added
+
+
+class _ProductCardParser(HTMLParser):
+    """Generic product-grid reader driven by common storefront class names."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.cards: list[dict[str, str]] = []
+        self._stack: list[dict[str, Any]] = []
+        self._open_cards: list[dict[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        tag = tag.lower()
+        attr = {str(key).lower(): (value or "") for key, value in attrs}
+        classes = str(attr.get("class") or "")
+        prop = str(attr.get("itemprop") or "").strip().lower()
+        is_card = bool(_PRODUCT_CARD_CLASS_RE.search(classes)) or (
+            "product" in str(attr.get("itemtype") or "").lower()
+        )
+        is_name = bool(_NAME_CLASS_RE.search(classes)) or prop in {"name", "title"}
+        is_price = (
+            bool(_PRICE_CLASS_RE.search(classes))
+            or prop in {"price", "lowprice"}
+            or any(key.startswith("data-price") for key in attr)
+        )
+        price_attr = (
+            attr.get("data-price")
+            or attr.get("data-product-price")
+            or attr.get("data-price-amount")
+            or (str(attr.get("content") or "") if is_price and prop else "")
+        )
+        card: Optional[dict[str, str]] = None
+        if is_card:
+            card = {"name": "", "price": "", "raw": ""}
+            self.cards.append(card)
+            self._open_cards.append(card)
+        active = self._open_cards[-1] if self._open_cards else None
+        if active is not None and price_attr:
+            active["price"] = active["price"] or str(price_attr).strip()
+        if tag in _VOID_TAGS:
+            return
+        self._stack.append(
+            {
+                "tag": tag,
+                "card": active,
+                "owns_card": bool(is_card),
+                "kind": "name" if is_name else ("price" if is_price else ""),
+            }
+        )
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag.lower() not in _VOID_TAGS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index]["tag"] == tag:
+                closed = self._stack[index:]
+                del self._stack[index:]
+                for frame in reversed(closed):
+                    if frame["owns_card"] and self._open_cards:
+                        self._open_cards.pop()
+                return
+
+    def handle_data(self, data: str) -> None:
+        text = clean_text(data)
+        if not text:
+            return
+        for card in self._open_cards:
+            card["raw"] = f"{card['raw']}\n{text}".strip()
+        for frame in reversed(self._stack):
+            card = frame["card"]
+            if card is None or not frame["kind"]:
+                continue
+            if frame["kind"] == "name" and not card["name"]:
+                card["name"] = text
+            elif frame["kind"] == "price" and not card["price"]:
+                card["price"] = text
+
+
+def _card_name(raw: str) -> str:
+    """First meaningful line of a card, with any trailing price removed."""
+    for line in clean_text(raw).split("\n"):
+        candidate = line.strip(" \t-–—:|")
+        if len(candidate) < 3:
+            continue
+        if _UI_COUNTER_RE.match(candidate) or _NAV_LINE_RE.match(candidate):
+            continue
+        price = _PRICE_TOKEN_RE.search(candidate)
+        if price:
+            candidate = candidate[: price.start()].strip(" -–—:|")
+        if len(candidate) >= 2:
+            return candidate[:200]
+    return ""
+
+
+def _extract_product_cards(
+    snapshot: PageSnapshot,
+    plans: dict[tuple[str, str, str], ExtractedPlan],
+    warnings: list[str],
+    *,
+    retail_category: str = "other",
+) -> int:
+    """Layer 2: generic grid selectors when the DOM text has no usable rows."""
+    if not snapshot.html:
+        return 0
+    parser = _ProductCardParser()
+    try:
+        parser.feed(snapshot.html)
+        parser.close()
+    except Exception:
+        return 0
+    url = snapshot.final_url or snapshot.url
+    added = 0
+    for card in parser.cards:
+        raw = clean_text(card.get("raw") or "")
+        name = clean_text(card.get("name") or "") or _card_name(raw)
+        if not _meaningful_plan_name(name):
+            continue
+        price_text = clean_text(card.get("price") or "")
+        token = _PRICE_TOKEN_RE.search(price_text) or _PRICE_TOKEN_RE.search(raw)
+        if token is None:
+            continue
+        display = token.group(0).strip()
+        money = parse_price(display)
+        if money is None:
+            continue
+        code = normalize_currency(token.group("symbol")) or money.get("currency")
+        amount = _valid_price(
+            money["amount"], currency=code, display=display, category=retail_category
+        )
+        if amount is None:
+            warnings.append(
+                f"rejected non-retail product-grid price {display!r} on {url}"
+            )
+            continue
+        _merge_plan(
+            plans,
+            ExtractedPlan(
+                name=name[:200],
+                price=amount,
+                price_display=display,
+                currency=code,
+                billing_period="one_time",
+                evidence=[Evidence(url, f"product grid: {name} / {display}", "product-card")],
+            ),
+        )
+        added += 1
+    return added
+
+
+def _gemini_text_fallback(
+    snapshots: Iterable[PageSnapshot],
+    plans: dict[tuple[str, str, str], ExtractedPlan],
+    warnings: list[str],
+    *,
+    vendor: str,
+    gemini_service: Any,
+    retail_category: str = "other",
+) -> int:
+    """Layer 4: ask Gemini for product names/prices from cleaned inner text."""
+    for snapshot in snapshots:
+        chunk = clean_text(snapshot.text or "")[:12_000]
+        if not chunk:
+            continue
+        url = snapshot.final_url or snapshot.url
+        try:
+            result = gemini_service.extract_pricing(chunk, source_url=url)
+        except Exception as exc:  # never let an LLM outage break collection
+            warnings.append(
+                f"Gemini HTML-text fallback failed on {url}: {type(exc).__name__}"
+            )
+            continue
+        added = 0
+        for plan in getattr(result, "plans", []) or []:
+            name = clean_text(str(plan.name or ""))
+            if not _meaningful_plan_name(name):
+                continue
+            code = plan.currency or getattr(result, "currency", None)
+            display = plan.price_display or (
+                _schema_display(float(plan.price), code) if plan.price is not None else None
+            )
+            amount = _valid_price(
+                plan.price, currency=code, display=display, category=retail_category
+            )
+            if amount is None:
+                continue
+            _merge_plan(
+                plans,
+                ExtractedPlan(
+                    name=name[:200],
+                    price=amount,
+                    price_display=display,
+                    currency=normalize_currency(code),
+                    billing_period="one_time",
+                    evidence=[
+                        Evidence(url, f"Gemini HTML-text extraction: {name} / {display}", "gemini_text")
+                    ],
+                ),
+            )
+            added += 1
+        if added:
+            warnings.append(
+                f"Gemini HTML-text fallback resolved {added} product price(s) on {url}"
+            )
+            return added
+    return 0
+
+
+def _dedupe_plans(plans: list[ExtractedPlan]) -> list[ExtractedPlan]:
+    """Collapse name/price duplicates produced by overlapping fallbacks."""
+    seen: set[tuple[str, Optional[float], str, str]] = set()
+    result: list[ExtractedPlan] = []
+    for plan in plans:
+        key = (
+            plan.name.strip().lower(),
+            plan.price,
+            (plan.currency or "").upper(),
+            plan.billing_period,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(plan)
+    return result
 
 
 def _extract_pricing_tables(
@@ -333,7 +903,9 @@ def _extract_pricing_tables(
 
 
 _PRICE_ANY_RE = re.compile(
-    r"(?P<display>(?:[$€£¥₹]\s?\d[\d,]*(?:\.\d+)?|[A-Z]{3}\s?\d[\d,]*(?:\.\d+)?)"
+    # Currency codes must really be uppercase codes: without the scoped flag,
+    # "Aloo Bhujia 250" was parsed as currency "jia" + price 250.
+    r"(?P<display>(?:[$€£¥₹]\s?\d[\d,]*(?:\.\d+)?|(?-i:[A-Z]{3})\s?\d[\d,]*(?:\.\d+)?)"
     r"\s*(?:/\s*(?:mo(?:nth)?|yr|year|user|seat)|per\s+(?:month|year|user|seat))?)",
     re.IGNORECASE,
 )
@@ -400,6 +972,7 @@ def extract_pricing(
     snapshots: Iterable[PageSnapshot],
     *,
     vendor: str = "",
+    gemini_service: Any = None,
 ) -> dict[str, Any]:
     plan_map: dict[tuple[str, str, str], ExtractedPlan] = {}
     usage_rates: list[dict[str, Any]] = []
@@ -420,6 +993,17 @@ def extract_pricing(
 
     for snapshot in snapshots:
         source_url = source_url or snapshot.final_url or snapshot.url
+        # Structured data first: obfuscated/JS grids still carry JSON-LD or
+        # microdata even when the rendered text has no parseable price rows.
+        _extract_pricing_jsonld(
+            snapshot, plan_map, warnings, retail_category=retail_category
+        )
+        _extract_pricing_microdata(
+            snapshot, plan_map, warnings, retail_category=retail_category
+        )
+        _extract_product_cards(
+            snapshot, plan_map, warnings, retail_category=retail_category
+        )
         _extract_pricing_tables(
             snapshot,
             plan_map,
@@ -455,7 +1039,20 @@ def extract_pricing(
             if enterprise:
                 enterprise_note = enterprise.group(1).strip()[:500]
 
-    plans = list(plan_map.values())
+    # Last resort: no structured data, grid or text row produced a price.
+    if gemini_service is not None and not any(
+        plan.price is not None for plan in plan_map.values()
+    ):
+        _gemini_text_fallback(
+            snapshots,
+            plan_map,
+            warnings,
+            vendor=vendor,
+            gemini_service=gemini_service,
+            retail_category=retail_category,
+        )
+
+    plans = _dedupe_plans(list(plan_map.values()))
     for plan in plans:
         currency = currency or plan.currency
 

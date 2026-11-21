@@ -266,6 +266,46 @@ class CompetitorListResponse(BaseModel):
     total: int = 0
 
 
+# --- Voice briefing (additive) --------------------------------------------- #
+
+BriefingWindow = Literal["24h", "7d"]
+
+
+class BriefingRequest(BaseModel):
+    """POST /api/v1/briefing/voice payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    window: BriefingWindow = Field(
+        default="24h",
+        description="Look-back window for the briefing: last 24 hours or last 7 days.",
+    )
+
+
+class BriefingChange(BaseModel):
+    """One market change (or tracked-state note) in a briefing."""
+
+    domain: str
+    change_type: Literal["pricing", "news", "capability", "tracked"]
+    title: str
+    detail: str
+    sentiment: Literal["positive", "threat", "neutral"] = "neutral"
+
+
+class BriefingSummary(BaseModel):
+    """GET /api/v1/briefing/changes payload (also drives the spoken script)."""
+
+    window: BriefingWindow
+    window_label: str
+    headline: str
+    script: str
+    generated_at: datetime
+    domains: list[str] = Field(default_factory=list)
+    record_count: int = 0
+    changes: list[BriefingChange] = Field(default_factory=list)
+    has_activity: bool = False
+
+
 class HealthResponse(BaseModel):
     """GET /health payload."""
 

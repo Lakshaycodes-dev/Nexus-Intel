@@ -5,6 +5,8 @@
  *   POST /api/v1/analyze              -> run a competitor analysis
  *   GET  /api/v1/analyze/{id}         -> read an analysis record
  *   GET  /api/v1/competitors/{id}     -> read the latest competitor brief
+ *   GET  /api/v1/briefing/changes     -> 24h/7d market-change digest
+ *   POST /api/v1/briefing/voice       -> ElevenLabs MP3 voice briefing
  *   GET  /health                      -> API + database health
  *
  * The base URL comes from `NEXT_PUBLIC_API_URL` (see `client/.env.example`) and
@@ -172,6 +174,32 @@ export interface CompetitorListResponse {
   total: number;
 }
 
+// --- Voice briefing contracts (mirror app/schemas.py) ---------------------- //
+
+export type BriefingWindow = "24h" | "7d";
+
+export type BriefingChangeType = "pricing" | "news" | "capability" | "tracked";
+
+export interface BriefingChange {
+  domain: string;
+  change_type: BriefingChangeType;
+  title: string;
+  detail: string;
+  sentiment: ApiSentiment;
+}
+
+export interface BriefingSummary {
+  window: BriefingWindow;
+  window_label: string;
+  headline: string;
+  script: string;
+  generated_at: string;
+  domains: string[];
+  record_count: number;
+  changes: BriefingChange[];
+  has_activity: boolean;
+}
+
 interface ApiValidationDetail {
   loc: string[];
   message: string;
@@ -238,6 +266,7 @@ interface RequestOptions extends RequestInit {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const ANALYZE_TIMEOUT_MS = 310_000;
+const BRIEFING_AUDIO_TIMEOUT_MS = 120_000;
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const {
@@ -288,6 +317,78 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (error instanceof ApiError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError("The request to the Nexus-Intel API timed out.", {
+        code: "request_timeout",
+      });
+    }
+    throw new ApiError(
+      "Could not reach the Nexus-Intel API. Make sure the backend is running.",
+      { code: "network_error" },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Binary variant of `request` for the ElevenLabs audio response.
+ *
+ * The regular helper always parses JSON, so audio would be corrupted. This
+ * keeps the same bearer-token handling and error envelope parsing.
+ */
+async function requestBlob(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Blob> {
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+    headers,
+    token,
+    ...init
+  } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  try {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set("Accept", "audio/mpeg, application/json");
+    if (init.body) requestHeaders.set("Content-Type", "application/json");
+
+    const accessToken = token ?? readStoredToken();
+    if (accessToken) {
+      requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+    }
+
+    const response = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...init,
+      cache: init.cache ?? "no-store",
+      headers: requestHeaders,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      let body: unknown = null;
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = { error: { code: "invalid_response", message: text } };
+        }
+      }
+      throw ApiError.fromResponse(response.status, body);
+    }
+
+    return await response.blob();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError("The voice briefing request timed out.", {
         code: "request_timeout",
       });
     }
@@ -382,6 +483,28 @@ export function getCompetitor(
     `/api/v1/competitors/${encodeURIComponent(competitorIdOrDomain)}`,
     { signal, token },
   );
+}
+
+// --- Voice briefing -------------------------------------------------------- //
+
+export function getBriefingSummary(
+  window: BriefingWindow,
+  signal?: AbortSignal,
+): Promise<BriefingSummary> {
+  const query = new URLSearchParams({ window }).toString();
+  return request<BriefingSummary>(`/api/v1/briefing/changes?${query}`, { signal });
+}
+
+export function getBriefingAudio(
+  window: BriefingWindow,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  return requestBlob("/api/v1/briefing/voice", {
+    method: "POST",
+    body: JSON.stringify({ window }),
+    timeoutMs: BRIEFING_AUDIO_TIMEOUT_MS,
+    signal,
+  });
 }
 
 // --- Helpers --------------------------------------------------------------- //
